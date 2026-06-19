@@ -1,0 +1,4 @@
+[submodule "diff_ADMM"]
+	path = diff_ADMM
+	url = git@github.com:roahmlab/diff_ADMM.git
+	branch = control-jac
