@@ -1,6 +1,7 @@
 import sys
 
-sys.path.insert(0, "/home/dshen/Code/deform-planning/src/diffadmm/build")
+# TODO fix
+sys.path.insert(0, "/home/aach/Documents/deform-planning/src/diffadmm/build")
 
 import numpy as np
 import diffadmm
