@@ -1,10 +1,9 @@
-import sys
-
-# TODO fix
-sys.path.insert(0, "/home/aach/Documents/deform-planning/src/diffadmm/build")
-
 import numpy as np
-import diffadmm
+import diffadmm.build.diffadmm
+
+
+
+
 
 B = 2
 N = 12
@@ -12,7 +11,7 @@ E = N - 1
 L = 0.1
 dt = 1e-2
 T = 30
-ADMM_ITERS = 50
+ADMM_ITERS = 500
 
 x0 = np.zeros((B, 3 * N))
 x0[:, 0::3] = np.arange(N) * L
@@ -116,8 +115,3 @@ J2 = diffadmm.forwards_with_jxu(
     gmres_restart=2,
     gmres_tol=5e-5,
 )
-
-
-print(J2)
-
-print((J == J2).all())

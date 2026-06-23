@@ -65,8 +65,7 @@ namespace diffadmm_wrapper
                             const NpArray &penalty_stretch, const NpArray &stiffness_bend,
                             const std::optional<NpArray> &damping,
                             std::vector<int> pin_indices, // by value: normalized in place
-                            const std::optional<NpArray> &pin_velocities,
-                            double dt, int T)
+                            const std::optional<NpArray> &pin_positions, int T)
         {
             const int B = mass.shape(0);
             const int N = mass.shape(1);
@@ -104,31 +103,50 @@ namespace diffadmm_wrapper
                 Kokkos::deep_copy(in.is_pinned, host);
             }
 
-            // --- pin_pos: pinned-node trajectories from x0 + (optional) velocities ---
+            // --- pin_pos: prescribed pinned-vertex trajectories, (B, T, N, 3).
+            //     Supplied as (B, T, n_pins, 3) in pin-index order and scattered;
+            //     if omitted, each pinned vertex is held at its x0 position. ---
             in.pin_pos = Kokkos::View<double ****>("pin_pos", B, T, N, 3);
             {
                 auto host = Kokkos::create_mirror_view(in.pin_pos);
                 Kokkos::deep_copy(host, 0.0);
 
-                auto x0r = x0.unchecked<2>();
-                const double *v = pin_velocities.has_value() ? pin_velocities.value().data() : nullptr;
-                for (int b = 0; b < B; ++b)
-                    for (size_t k = 0; k < pin_indices.size(); ++k)
-                    {
-                        const double vx = v ? v[3 * k + 0] : 0.0;
-                        const double vy = v ? v[3 * k + 1] : 0.0;
-                        const double vz = v ? v[3 * k + 2] : 0.0;
+                if (pin_positions.has_value())
+                {
+                    const NpArray &P = pin_positions.value();
+                    if (P.ndim() != 4 || P.shape(0) != B || P.shape(1) != T ||
+                        static_cast<size_t>(P.shape(2)) != pin_indices.size() || P.shape(3) != 3)
+                        throw std::runtime_error(
+                            "pin_positions must have shape (B, T, n_pins, 3)");
 
-                        const int p = pin_indices[k];
-
-                        for (int t = 0; t < T; ++t)
+                    auto pp = P.unchecked<4>();
+                    for (int b = 0; b < B; ++b)
+                        for (size_t k = 0; k < pin_indices.size(); ++k)
                         {
-                            const double s = t * dt;
-                            host(b, t, p, 0) = x0r(b, 3 * p + 0) + s * vx;
-                            host(b, t, p, 1) = x0r(b, 3 * p + 1) + s * vy;
-                            host(b, t, p, 2) = x0r(b, 3 * p + 2) + s * vz;
+                            const int p = pin_indices[k];
+                            for (int t = 0; t < T; ++t)
+                            {
+                                host(b, t, p, 0) = pp(b, t, (py::ssize_t)k, 0);
+                                host(b, t, p, 1) = pp(b, t, (py::ssize_t)k, 1);
+                                host(b, t, p, 2) = pp(b, t, (py::ssize_t)k, 2);
+                            }
                         }
-                    }
+                }
+                else // hold each pinned vertex at its x0 position for all t
+                {
+                    auto x0r = x0.unchecked<2>();
+                    for (int b = 0; b < B; ++b)
+                        for (size_t k = 0; k < pin_indices.size(); ++k)
+                        {
+                            const int p = pin_indices[k];
+                            for (int t = 0; t < T; ++t)
+                            {
+                                host(b, t, p, 0) = x0r(b, 3 * p + 0);
+                                host(b, t, p, 1) = x0r(b, 3 * p + 1);
+                                host(b, t, p, 2) = x0r(b, 3 * p + 2);
+                            }
+                        }
+                }
                 Kokkos::deep_copy(in.pin_pos, host);
             }
 
@@ -155,6 +173,7 @@ namespace diffadmm_wrapper
         }
 
         // ---------- Internal DifADMM Calls ----------
+
 
         fwd_out _forward(const fwd_in &in, double dt, double penalty_bend, int ADMM_ITERS,
                          int T, bool bending_admm, bool stretching_admm,
@@ -231,14 +250,14 @@ namespace diffadmm_wrapper
         NpArray stiffness_stretch, NpArray penalty_stretch,
         NpArray stiffness_bend, std::optional<NpArray> damping,
         std::vector<int> pin_indices,
-        std::optional<NpArray> pin_velocities, double dt,
+        std::optional<NpArray> pin_positions, double dt,
         double penalty_bend, int ADMM_ITERS, int T, bool bending_admm,
         bool stretching_admm, bool bending_as_force, double admm_tol,
         int admm_check_interval)
     {
         fwd_in in = build_fwd_in(x0, v0, mass, L0, stiffness_stretch, penalty_stretch,
                                  stiffness_bend, damping, std::move(pin_indices),
-                                 pin_velocities, dt, T);
+                                 pin_positions, T);
 
         fwd_out out = _forward(in, dt, penalty_bend, ADMM_ITERS, T, bending_admm,
                                stretching_admm, bending_as_force, admm_tol,
@@ -306,14 +325,14 @@ namespace diffadmm_wrapper
     py::array_t<double> forwards_with_jxu(
         NpArray x0, NpArray v0, NpArray mass, NpArray L0, NpArray stiffness_stretch,
         NpArray penalty_stretch, NpArray stiffness_bend, std::optional<NpArray> damping,
-        std::vector<int> pin_indices, std::optional<NpArray> pin_velocities, double dt,
+        std::vector<int> pin_indices, std::optional<NpArray> pin_positions, double dt,
         double penalty_bend, int ADMM_ITERS, int T, bool bending_admm,
         bool stretching_admm, bool bending_as_force, double admm_tol,
         int admm_check_interval, int t, int gmres_m, int gmres_restart, double gmres_tol)
     {
         fwd_in fin = build_fwd_in(x0, v0, mass, L0, stiffness_stretch, penalty_stretch,
                                   stiffness_bend, damping, std::move(pin_indices),
-                                  pin_velocities, dt, T);
+                                  pin_positions, T);
  
         fwd_out fout = _forward(fin, dt, penalty_bend, ADMM_ITERS, T, bending_admm,
                                 stretching_admm, bending_as_force, admm_tol,

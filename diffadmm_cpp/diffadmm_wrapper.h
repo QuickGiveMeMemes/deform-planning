@@ -107,7 +107,7 @@ namespace diffadmm_wrapper
         NpArray stiffness_stretch, NpArray penalty_stretch,
         NpArray stiffness_bend, std::optional<NpArray> damping,
         std::vector<int> pin_indices,
-        std::optional<NpArray> pin_velocities, double dt,
+        std::optional<NpArray> pin_positions, double dt,
         double penalty_bend, int ADMM_ITERS, int T,
         bool bending_admm, bool stretching_admm,
         bool bending_as_force, double admm_tol,
@@ -126,7 +126,7 @@ namespace diffadmm_wrapper
         NpArray x0, NpArray v0, NpArray mass, NpArray L0, NpArray stiffness_stretch,
         NpArray penalty_stretch, NpArray stiffness_bend,
         std::optional<NpArray> damping, std::vector<int> pin_indices,
-        std::optional<NpArray> pin_velocities, double dt, double penalty_bend,
+        std::optional<NpArray> pin_positions, double dt, double penalty_bend,
         int ADMM_ITERS, int T, bool bending_admm, bool stretching_admm,
         bool bending_as_force, double admm_tol, int admm_check_interval, int t,
         int gmres_m, int gmres_restart, double gmres_tol);
