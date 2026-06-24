@@ -100,8 +100,10 @@ namespace diffadmm_wrapper
 
     // ---------- Exposed methods ----------
 
-    // Runs `difadmm_forward`.
-    // TODO: document
+    // TODO if this pybind becomes the main interface and not only the testing interface, then
+    // expose the A_inv and Jxu scratch methods for efficiency. Should be easy integration into the
+    // existing deformable wrapper.
+
     py::dict forward(
         NpArray x0, NpArray v0, NpArray mass, NpArray L0,
         NpArray stiffness_stretch, NpArray penalty_stretch,
@@ -118,7 +120,7 @@ namespace diffadmm_wrapper
         NpArray z_bend_hist, NpArray dual_bend_hist, NpArray mass, NpArray A_inv,
         NpArray L0, NpArray stiffness_stretch, NpArray penalty_stretch,
         NpArray stiffness_bend, NpArray penaltyDt_stretch, NpArray D_bend,
-        NpArray W_bend, NpArray rest_curv, std::vector<int> pin_indices, int t,
+        NpArray W_bend, NpArray rest_curv, std::vector<int> pin_indices, std::vector<int> t,
         double dt, double penalty_bend, bool bending_admm, bool stretching_admm,
         bool bending_as_force, int gmres_m, int gmres_restart, double gmres_tol);
 
@@ -128,6 +130,6 @@ namespace diffadmm_wrapper
         std::optional<NpArray> damping, std::vector<int> pin_indices,
         std::optional<NpArray> pin_positions, double dt, double penalty_bend,
         int ADMM_ITERS, int T, bool bending_admm, bool stretching_admm,
-        bool bending_as_force, double admm_tol, int admm_check_interval, int t,
+        bool bending_as_force, double admm_tol, int admm_check_interval, std::vector<int> t,
         int gmres_m, int gmres_restart, double gmres_tol);
 }

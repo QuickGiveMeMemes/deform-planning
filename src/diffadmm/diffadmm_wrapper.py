@@ -77,7 +77,8 @@ class RopeProperties:
         )
 
         # Control (pinned)
-        r.pinned = data["pinned"]
+        r.pinned = data["control"]["pinned"]
+        r.n_u = len(r.pinned) * 3
 
         return r
 
@@ -95,7 +96,7 @@ class DeformableConfig:
     gmres_m: int = 150
     gmres_restart: int = 60
     gmres_tol: float = 1e-8
-    ADMM_Iter = 500
+    ADMM_Iter: int = 500
 
     stretch_pen: float = 1e3
     bend_pen: float = 0.0
@@ -114,32 +115,33 @@ class Deformable:
 
     def _batched(self, B):
         N = self.r.N
- 
+
         def rep(a):
             return np.repeat(np.asarray(a, np.float64)[None, ...], B, axis=0)
- 
+
         return dict(
-            x0=rep(self.r.x0.reshape(-1)),            # (B, 3N)
-            v0=rep(self.r.v0.reshape(-1)),            # (B, 3N)
-            mass=rep(self.r.mass),                    # (B, N)
-            L0=rep(self.r.l0),                        # (B, N-1)
-            damping=rep(self.r.damping),              # (B, N)
+            x0=rep(self.r.x0.reshape(-1)),  # (B, 3N)
+            v0=rep(self.r.v0.reshape(-1)),  # (B, 3N)
+            mass=rep(self.r.mass),  # (B, N)
+            L0=rep(self.r.l0),  # (B, N-1)
+            damping=rep(self.r.damping),  # (B, N)
             stiffness_stretch=rep(self.r.k_stretch),  # (B, N-1)
-            stiffness_bend=rep(self.r.k_bend),        # (B, N-2)
+            stiffness_bend=rep(self.r.k_bend),  # (B, N-2)
             penalty_stretch=np.full((B, N - 1), self.config.stretch_pen, np.float64),
         )
-    
+
     def _flags(self):
         return dict(
             bending_admm=self.r.enable_bending,
             stretching_admm=self.r.enable_stretching,
             bending_as_force=self.r.bending_as_force,
         )
+
     def forwards(self, pin_pos):
         # pin_pos: (B, T, n_pins, 3), n_pins == len(pinned), T == config.T
         pin_pos = np.ascontiguousarray(pin_pos, dtype=np.float64)
         B = pin_pos.shape[0]
- 
+
         return diffadmm.forward(
             **self._batched(B),
             pin_indices=self.r.pinned,
@@ -152,13 +154,15 @@ class Deformable:
             admm_check_interval=0,
             **self._flags(),
         )
- 
 
     def jxu(self, pin_pos, t):
-        # pin_pos: (B, T, n_pins, 3); t: timestep index at which to extract J_xu
+        # pin_pos: (B, T, n_pins, 3)
+        # t must be an array/list
+        # Returns in shape (t, B, N3, n_pins)
+
         pin_pos = np.ascontiguousarray(pin_pos, dtype=np.float64)
         B = pin_pos.shape[0]
- 
+
         return diffadmm.forwards_with_jxu(
             **self._batched(B),
             pin_indices=self.r.pinned,
@@ -174,4 +178,4 @@ class Deformable:
             gmres_restart=self.config.gmres_restart,
             gmres_tol=self.config.gmres_tol,
             **self._flags(),
-        )
+        ).reshape(len(t), B, 3 * self.r.N, self.r.n_u)
