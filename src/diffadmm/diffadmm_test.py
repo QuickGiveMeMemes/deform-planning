@@ -24,7 +24,7 @@ admm = Deformable(cfg)
 B = 1
 T = 20
 
-pin_pos = np.array(np.zeros((1, 3)))
+pin_pos = np.array([[0, 0, 0], [0.1, 0.2, 0.3]])
 pin_pos = np.repeat(pin_pos[None, ...], T, axis=0)
 pin_pos = np.repeat(pin_pos[None, ...], B, axis=0)
 
@@ -61,16 +61,9 @@ def plot_init(ax, x: np.ndarray):
     x = x.reshape((T, N, 3))
 
     segs = []
-    for i in range(1, N):
-        seg_v = np.vstack(
-            (
-                x[0, i - 1, :],
-                x[0, i, :],
-            )
-        )
-        seg, = ax.plot3D(x[:, 0], x[:, 1], x[:, 2])
+    for _ in range(1, N):
+        (seg,) = ax.plot3D(x[:, 0], x[:, 1], x[:, 2])
         segs.append(seg)
-
 
     ax.set_axis_on()
     ax.set_aspect("equal")
@@ -98,7 +91,8 @@ def upd_plt(segs, x, t):
             ).T
         )
 
-x = fwd["x_hist"][0, ...].copy()
+
+x = fwd["x_hist"][0, ...].copy() # whyyy ...
 
 
 fig = plt.figure()
@@ -113,14 +107,10 @@ def animate(t):
     upd_plt(segs, x, t)
     return segs
 
+
 # Set up the animation to play through the frames (0 to T-1)
 ani = animation.FuncAnimation(
-    fig, 
-    animate, 
-    frames=T, 
-    interval=50, # 50ms = 0.05 seconds
-    blit=False,
-    repeat=True
+    fig, animate, frames=T, interval=50, blit=False, repeat=True  # 50ms = 0.05 seconds
 )
 
-plt.show() # This takes over the event loop safely
+plt.show()  # This takes over the event loop safely

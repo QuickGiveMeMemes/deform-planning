@@ -48,4 +48,4 @@ bending:
   k_bend: 1e3
 
 control:
-  pinned: [0]
+  pinned: [0, -1]

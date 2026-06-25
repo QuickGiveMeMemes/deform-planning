@@ -11,6 +11,7 @@ import diffadmm
 class RopeProperties:
 
     N: int = 0
+    n_u: int = 0
 
     x0: np.ndarray = None  # (N, 3)
     v0: np.ndarray = None  # (N, 3)
@@ -33,14 +34,38 @@ class RopeProperties:
         with open(path, "r") as f:
             data = safe_load(f)
 
-        # Vertices
-        r = RopeProperties()
-        r.x0 = np.array(data["vertices"])
-        r.N = r.x0.shape[0]
-        r.v0 = np.zeros((r.N, 3))
+        x0 = np.array(data["vertices"])
+        N = x0.shape[0]
 
-        # L0, currently calculated from resting position. maybe change
-        r.l0 = np.linalg.norm(r.x0[1:] - r.x0[:-1], axis=1)
+        r = RopeProperties(
+            # Vertices
+            x0=x0,
+            N=N,
+            v0=np.zeros((N, 3)),
+            l0=np.linalg.norm(
+                x0[1:] - x0[:-1], axis=1
+            ),  # currently calculated from resting position. maybe change
+            # Stretching
+            enable_stretching=data["stretching"]["enable"],
+            k_stretch=np.full(
+                shape=max(N - 1, 0),
+                fill_value=data["stretching"]["stiffness"] if data["stretching"]["enable"] else 0,
+            ),
+            # Bending
+            enable_bending=data["bending"]["enable_bending"],
+            bending_as_force=data["bending"]["bending_as_force"],
+            k_bend=np.full(
+                shape=max(N - 2, 0),
+                fill_value=(
+                    data["bending"]["k_bend"]
+                    if data["bending"]["enable_bending"] or data["bending"]["bending_as_force"]
+                    else 0
+                ),
+            ),
+            # Pinned Control
+            pinned=data["control"]["pinned"],
+            n_u=len(data["control"]["pinned"]) * 3,
+        )
 
         # Mass
         if data["mass"]["mass_uniform"]:
@@ -58,27 +83,6 @@ class RopeProperties:
             if len(damping_arr) != r.N:
                 raise ValueError(f"Wrong damping size")
             r.damping = damping_arr
-
-        # Stretching
-        r.enable_stretching = data["stretching"]["enable"]
-        r.k_stretch = np.full(
-            shape=max(r.N - 1, 0),
-            fill_value=data["stretching"]["stiffness"] if r.enable_stretching else 0.0,
-        )
-
-        # Bending
-        r.enable_bending = data["bending"]["enable_bending"]
-        r.bending_as_force = data["bending"]["bending_as_force"]
-
-        bending = r.enable_bending or r.bending_as_force
-        r.k_bend = np.full(
-            shape=max(r.N - 2, 0),
-            fill_value=data["bending"]["k_bend"] if bending else 0.0,
-        )
-
-        # Control (pinned)
-        r.pinned = data["control"]["pinned"]
-        r.n_u = len(r.pinned) * 3
 
         return r
 
@@ -117,6 +121,7 @@ class Deformable:
         N = self.r.N
 
         def rep(a):
+            # Repeats a B times in the first dimension
             return np.repeat(np.asarray(a, np.float64)[None, ...], B, axis=0)
 
         return dict(
