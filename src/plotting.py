@@ -20,11 +20,13 @@ def x_at_config(model, data, q):
         x[i, :] = oMi.translation.T
     return x
 
-def gen_plt_from_urdf(ax, model, data, q=None):
+def gen_plt_from_urdf(ax, model, data, q=None, pt_kwargs=None, seg_kwargs=None):
     """
     Initializes segments corresponding to robot
     """
-    
+    pt_kwargs = {} if pt_kwargs is None else pt_kwargs
+    seg_kwargs = {} if seg_kwargs is None else seg_kwargs
+
     if q is None:
         q = np.zeros(model.njoints - 1)
 
@@ -77,10 +79,14 @@ def upd_plt_arm(segs, model, data, q):
 
 def plot_init_rope(ax, x: np.ndarray):
     # Assuming dims (T, 3N) so batch already removed
-    T = x.shape[0]
-    N = x.shape[1] // 3
+    if len(x.shape) == 2:
+        T = x.shape[0]
+        N = x.shape[1] // 3
 
-    x = x.reshape((T, N, 3))
+        x = x.reshape((T, N, 3))
+    else:
+        T = x.shape[0]
+        N = x.shape[1]
 
     segs = []
     for _ in range(1, N):
@@ -97,10 +103,15 @@ def plot_init_rope(ax, x: np.ndarray):
 
 def upd_plt_rope(segs, x, t):
 
-    T = x.shape[0]
-    N = x.shape[1] // 3
+    if len(x.shape) == 2:
+        T = x.shape[0]
+        N = x.shape[1] // 3
 
-    x = x.reshape((T, N, 3))
+        x = x.reshape((T, N, 3))
+    else:
+        T = x.shape[0]
+        N = x.shape[1]
+
 
     for i, seg in enumerate(segs):
         seg.set_data_3d(

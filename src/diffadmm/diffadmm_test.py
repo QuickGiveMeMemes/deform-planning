@@ -4,10 +4,14 @@ import time
 from src.diffadmm.diffadmm_wrapper import Deformable, DeformableConfig
 from src.plotting import plot_init_rope, upd_plt_rope
 
+B = 1
+T = 40
+dt = 0.05
+
 cfg = DeformableConfig(
-    "../data/rope/test_rope.yaml",
-    dt=0.05,
-    T=20,
+    "src/data/rope/test_rope.yaml",
+    dt=dt,
+    T=T,
     DEFAULT_BATCH_SIZE=1,
     gmres_m=150,
     gmres_restart=60,
@@ -19,8 +23,6 @@ cfg = DeformableConfig(
 
 admm = Deformable(cfg)
 
-B = 1
-T = 20
 
 pin_pos = np.array([[0, 0, 0], [0.1, 0.2, 0.3]])
 pin_pos = np.repeat(pin_pos[None, ...], T, axis=0)
@@ -65,7 +67,7 @@ def animate(t):
     return segs
 
 ani = animation.FuncAnimation(
-    fig, animate, frames=T, interval=50, blit=False, repeat=True  # 50ms = 0.05 seconds
+    fig, animate, frames=T, interval=dt * 1e3, blit=False, repeat=True 
 )
 
 plt.show() 
