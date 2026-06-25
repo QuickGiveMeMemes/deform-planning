@@ -3,7 +3,7 @@ from typing import List
 from yaml import safe_load
 import numpy as np
 
-import diffadmm
+import src.diffadmm.diffadmm as diffadmm
 
 
 # TODO: support nonzero velocity ic
@@ -34,38 +34,14 @@ class RopeProperties:
         with open(path, "r") as f:
             data = safe_load(f)
 
-        x0 = np.array(data["vertices"])
-        N = x0.shape[0]
+        # Vertices
+        r = RopeProperties()
+        r.x0 = np.array(data["vertices"])
+        r.N = r.x0.shape[0]
+        r.v0 = np.zeros((r.N, 3))
 
-        r = RopeProperties(
-            # Vertices
-            x0=x0,
-            N=N,
-            v0=np.zeros((N, 3)),
-            l0=np.linalg.norm(
-                x0[1:] - x0[:-1], axis=1
-            ),  # currently calculated from resting position. maybe change
-            # Stretching
-            enable_stretching=data["stretching"]["enable"],
-            k_stretch=np.full(
-                shape=max(N - 1, 0),
-                fill_value=data["stretching"]["stiffness"] if data["stretching"]["enable"] else 0,
-            ),
-            # Bending
-            enable_bending=data["bending"]["enable_bending"],
-            bending_as_force=data["bending"]["bending_as_force"],
-            k_bend=np.full(
-                shape=max(N - 2, 0),
-                fill_value=(
-                    data["bending"]["k_bend"]
-                    if data["bending"]["enable_bending"] or data["bending"]["bending_as_force"]
-                    else 0
-                ),
-            ),
-            # Pinned Control
-            pinned=data["control"]["pinned"],
-            n_u=len(data["control"]["pinned"]) * 3,
-        )
+        # L0, currently calculated from resting position. maybe change
+        r.l0 = np.linalg.norm(r.x0[1:] - r.x0[:-1], axis=1)
 
         # Mass
         if data["mass"]["mass_uniform"]:
@@ -84,6 +60,27 @@ class RopeProperties:
                 raise ValueError(f"Wrong damping size")
             r.damping = damping_arr
 
+        # Stretching
+        r.enable_stretching = data["stretching"]["enable"]
+        r.k_stretch = np.full(
+            shape=max(r.N - 1, 0),
+            fill_value=data["stretching"]["stiffness"] if r.enable_stretching else 0.0,
+        )
+
+        # Bending
+        r.enable_bending = data["bending"]["enable_bending"]
+        r.bending_as_force = data["bending"]["bending_as_force"]
+
+        bending = r.enable_bending or r.bending_as_force
+        r.k_bend = np.full(
+            shape=max(r.N - 2, 0),
+            fill_value=data["bending"]["k_bend"] if bending else 0.0,
+        )
+
+        # Control (pinned)
+        r.pinned = data["control"]["pinned"]
+        r.n_u = len(r.pinned) * 3
+
         return r
 
 
@@ -93,10 +90,7 @@ class DeformableConfig:
 
     dt: float = 0.05
     T: int = 20
-    seg: float = 0.2
-    sim_time: float = 1.0
-    eps_fd: float = 1e-8
-    DEFAULT_BATCH_SIZE: int = 1
+    DEFAULT_BATCH_SIZE: int = 1 # Keep in case Jxu scratch ever is exposed
     gmres_m: int = 150
     gmres_restart: int = 60
     gmres_tol: float = 1e-8
