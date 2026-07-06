@@ -25,16 +25,16 @@ PYBIND11_MODULE(diffadmm, m) {
           py::arg("bending_admm"), py::arg("stretching_admm"), py::arg("bending_as_force"),
           py::arg("admm_tol"), py::arg("admm_check_interval"));
 
-    m.def("compute_jxu", &diffadmm_wrapper::compute_jxu, py::arg("x_hist"), py::arg("y_hist"),
+    m.def("compute_jac", &diffadmm_wrapper::compute_jac, py::arg("x0"), py::arg("x_hist"), py::arg("y_hist"),
           py::arg("z_hist"), py::arg("dual_hist"), py::arg("z_bend_hist"),
-          py::arg("dual_bend_hist"), py::arg("mass"), py::arg("A_inv"), py::arg("L0"),
+          py::arg("dual_bend_hist"), py::arg("mass"), py::arg("A_inv"), py::arg("damping"), py::arg("L0"),
           py::arg("stiffness_stretch"), py::arg("penalty_stretch"), py::arg("stiffness_bend"),
           py::arg("penaltyDt_stretch"), py::arg("D_bend"), py::arg("W_bend"), py::arg("rest_curv"),
           py::arg("pin_indices"), py::arg("t"), py::arg("dt"), py::arg("penalty_bend"),
           py::arg("bending_admm"), py::arg("stretching_admm"), py::arg("bending_as_force"),
           py::arg("gmres_m"), py::arg("gmres_restart"), py::arg("gmres_tol"));
 
-    m.def("forwards_with_jxu", &diffadmm_wrapper::forwards_with_jxu, py::arg("x0"), py::arg("v0"),
+    m.def("forwards_with_jac", &diffadmm_wrapper::forwards_with_jac, py::arg("x0"), py::arg("v0"),
           py::arg("mass"), py::arg("L0"), py::arg("stiffness_stretch"), py::arg("penalty_stretch"),
           py::arg("stiffness_bend"), py::arg("damping"), py::arg("pin_indices"),
           py::arg("pin_positions"), py::arg("dt"), py::arg("penalty_bend"), py::arg("ADMM_ITERS"),

@@ -2,6 +2,7 @@
 
 #include "admm_backward.h"
 #include "admm_forward.h"
+#include <tuple>
 
 /*
 Structure:
@@ -47,10 +48,11 @@ namespace diffadmm_wrapper {
         };
 
         struct JxuIn {
+            Kokkos::View<double **> x0;
             Kokkos::View<double ***> x_hist, y_hist, z_hist, dual_hist, z_bend_hist, dual_bend_hist;
             Kokkos::View<double **> A_inv;
             Kokkos::View<double ***> penaltyDt_stretch, D_bend, W_bend;
-            Kokkos::View<double **> rest_curv, mass, L0, stiffness_stretch, penalty_stretch,
+            Kokkos::View<double **> rest_curv, mass, L0, stiffness_stretch, penalty_stretch, damping,
                 stiffness_bend;
             Kokkos::View<bool *> is_pinned;
         };
@@ -205,7 +207,8 @@ namespace diffadmm_wrapper {
                           D_bend,      W_bend,         in.rest_curv};
         }
 
-        Kokkos::View<double ***> _compute_jxu(const JxuIn &in, std::vector<int> t, double dt,
+        std::tuple<Kokkos::View<double ***>, Kokkos::View<double ***>, Kokkos::View<double ***>> 
+        _compute_jacobians(const JxuIn &in, std::vector<int> t, double dt,
                                               double penalty_bend, bool bending_admm,
                                               bool stretching_admm, bool bending_as_force,
                                               int gmres_m, int gmres_restart, double gmres_tol) {
@@ -215,7 +218,7 @@ namespace diffadmm_wrapper {
             const int E = N - 1;
             const int E3 = stretching_admm ? 3 * E : 0;
 
-            auto scratch = allocate_JUScratch(B, N, gmres_m, stretching_admm, bending_admm,
+            auto scratch = allocate_JacScratch(B, N, gmres_m, stretching_admm, bending_admm,
                                               bending_as_force, in.is_pinned, t.size());
 
             // T conversion to Kokkos
@@ -231,16 +234,19 @@ namespace diffadmm_wrapper {
             }
 
             Kokkos::View<double ***> J_xu("J_xu", (int)t.size() * B, N3, scratch.n_u);
+            Kokkos::View<double ***> J_xx("J_xx", (int)t.size() * B, N3, N3);
+            Kokkos::View<double ***> J_xv("J_xv", (int)t.size() * B, N3, N3);
+            Kokkos::View<double ***> J_xy("J_xy", (int)t.size() * B, N3, N3); // Will not be returned
 
-            admm_control_dense_state(
+            admm_jacobian_dense_state(
                 in.x_hist, in.y_hist, in.z_hist, in.dual_hist, in.z_bend_hist, in.dual_bend_hist,
                 t_d, 1.0 / (dt * dt), in.is_pinned, in.mass, in.A_inv, in.L0, in.stiffness_stretch,
                 in.penalty_stretch, in.stiffness_bend, penalty_bend, bending_admm, stretching_admm,
                 bending_as_force, in.penaltyDt_stretch, in.D_bend, in.W_bend, B, N, N3, E, E3,
-                scratch, gmres_m, gmres_restart, gmres_tol, J_xu);
+                scratch, gmres_m, gmres_restart, gmres_tol, dt, in.damping, in.x0, J_xu, J_xx, J_xv, J_xy);
 
             Kokkos::fence("jxu_fence");
-            return J_xu;
+            return std::make_tuple(J_xu, J_xx, J_xv);
         }
     } // namespace
 
@@ -273,9 +279,9 @@ namespace diffadmm_wrapper {
         return d;
     }
 
-    py::array_t<double>
-    compute_jxu(NpArray x_hist, NpArray y_hist, NpArray z_hist, NpArray dual_hist,
-                NpArray z_bend_hist, NpArray dual_bend_hist, NpArray mass, NpArray A_inv,
+    std::tuple<py::array_t<double>, py::array_t<double>, py::array_t<double>>
+    compute_jac(NpArray x0, NpArray x_hist, NpArray y_hist, NpArray z_hist, NpArray dual_hist,
+                NpArray z_bend_hist, NpArray dual_bend_hist, NpArray mass, NpArray A_inv, NpArray damping,
                 NpArray L0, NpArray stiffness_stretch, NpArray penalty_stretch,
                 NpArray stiffness_bend, NpArray penaltyDt_stretch, NpArray D_bend, NpArray W_bend,
                 NpArray rest_curv, std::vector<int> pin_indices, std::vector<int> t, double dt,
@@ -284,7 +290,9 @@ namespace diffadmm_wrapper {
         const int N = mass.shape(1);
 
         JxuIn in;
-
+        
+        in.x0 = np_to_kokkos_2d(x0, "x0");
+        in.damping = np_to_kokkos_2d(damping, "damping");
         in.x_hist = np_to_kokkos_3d(x_hist, "x_hist");
         in.y_hist = np_to_kokkos_3d(y_hist, "y_hist");
         in.z_hist = np_to_kokkos_3d(z_hist, "z_hist");
@@ -314,13 +322,19 @@ namespace diffadmm_wrapper {
             Kokkos::deep_copy(in.is_pinned, host);
         }
 
-        auto J_xu = _compute_jxu(in, t, dt, penalty_bend, bending_admm, stretching_admm,
+        auto jacs = _compute_jacobians(in, t, dt, penalty_bend, bending_admm, stretching_admm,
                                  bending_as_force, gmres_m, gmres_restart, gmres_tol);
-        return kokkos_to_np(J_xu);
+        
+        
+        return std::make_tuple(
+            kokkos_to_np(std::get<0>(jacs)),
+            kokkos_to_np(std::get<1>(jacs)),
+            kokkos_to_np(std::get<2>(jacs))
+        );
     }
 
-    py::array_t<double>
-    forwards_with_jxu(NpArray x0, NpArray v0, NpArray mass, NpArray L0, NpArray stiffness_stretch,
+    std::tuple<py::array_t<double>, py::array_t<double>, py::array_t<double>>
+    forwards_with_jac(NpArray x0, NpArray v0, NpArray mass, NpArray L0, NpArray stiffness_stretch,
                       NpArray penalty_stretch, NpArray stiffness_bend,
                       std::optional<NpArray> damping, std::vector<int> pin_indices,
                       std::optional<NpArray> pin_positions, double dt, double penalty_bend,
@@ -336,6 +350,8 @@ namespace diffadmm_wrapper {
         // Hand the already-resident device views straight through; no
         // re-conversion.
         JxuIn jin;
+        jin.x0 = fin.x0;
+        jin.damping = fin.damping;
         jin.x_hist = fout.x_hist;
         jin.y_hist = fout.y_hist;
         jin.z_hist = fout.z_hist;
@@ -354,8 +370,14 @@ namespace diffadmm_wrapper {
         jin.stiffness_bend = fin.stiffness_bend;
         jin.is_pinned = fin.is_pinned;
 
-        auto J_xu = _compute_jxu(jin, t, dt, penalty_bend, bending_admm, stretching_admm,
+        auto jacs = _compute_jacobians(jin, t, dt, penalty_bend, bending_admm, stretching_admm,
                                  bending_as_force, gmres_m, gmres_restart, gmres_tol);
-        return kokkos_to_np(J_xu);
+        
+        
+        return std::make_tuple(
+            kokkos_to_np(std::get<0>(jacs)),
+            kokkos_to_np(std::get<1>(jacs)),
+            kokkos_to_np(std::get<2>(jacs))
+        );
     }
 } // namespace diffadmm_wrapper

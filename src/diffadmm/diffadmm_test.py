@@ -5,7 +5,7 @@ from src.diffadmm.diffadmm_wrapper import Deformable, DeformableConfig
 from src.plotting import plot_init_rope, upd_plt_rope
 
 B = 1
-T = 40
+T = 20
 dt = 0.05
 
 cfg = DeformableConfig(
@@ -32,12 +32,12 @@ t = [i for i in range(20)]
 
 
 start = time.perf_counter()
-J = admm.jxu(pin_pos, t)
+J = admm.jac(pin_pos, t)
 end = time.perf_counter()
 print(f"Jxu Calculation time: {end - start}")
 
 start = time.perf_counter()
-J = admm.jxu(pin_pos, t)
+J = admm.jac(pin_pos, t)
 end = time.perf_counter()
 print(f"Jxu Calculation time: {end - start}")
 

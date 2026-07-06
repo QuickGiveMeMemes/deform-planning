@@ -154,7 +154,7 @@ class Deformable:
             **self._flags(),
         )
 
-    def jxu(self, pin_pos, t):
+    def jac(self, pin_pos, t):
         # pin_pos: (B, T, n_pins, 3)
         # t must be an array/list
         # Returns in shape (t, B, N3, n_pins)
@@ -162,7 +162,7 @@ class Deformable:
         pin_pos = np.ascontiguousarray(pin_pos, dtype=np.float64)
         B = pin_pos.shape[0]
 
-        return diffadmm.forwards_with_jxu(
+        Jxu, _, _  = diffadmm.forwards_with_jac(
             **self._batched(B),
             pin_indices=self.r.pinned,
             pin_positions=pin_pos,
@@ -177,4 +177,6 @@ class Deformable:
             gmres_restart=self.config.gmres_restart,
             gmres_tol=self.config.gmres_tol,
             **self._flags(),
-        ).reshape(len(t), B, 3 * self.r.N, self.r.n_u)
+        )
+
+        return Jxu.reshape(len(t), B, 3 * self.r.N, self.r.n_u)

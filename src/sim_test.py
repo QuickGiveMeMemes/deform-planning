@@ -17,8 +17,8 @@ Tests forward dynamics to be used in the AGHF
 urdf_path = "src/data/urdf/kinova3_1arm.urdf"
 rope_path = "src/data/rope/arm_rope_1pin.yaml"
 
-dt = 0.05
-T = 40
+dt = 0.01
+T = 200
 B = 1
 
 admm_kwargs = {
@@ -151,7 +151,7 @@ x_fwd_out = fwd_out["x_hist"][0]
 # Generating rope trajectory from Jxu extraction
 t = [t for t in range(T)]
 start = time.perf_counter()
-jxp = admm.jxu(p, t).reshape((T, admm.r.N, 3, n_pins, 3))
+jxp = admm.jac(p, t).reshape((T, admm.r.N, 3, n_pins, 3))
 end = time.perf_counter()
 print(f"Jxu Calculation time: {end - start}")
 
@@ -169,6 +169,11 @@ pddot = np.einsum("tuav,tv->tua", Jp[:-1], a_a) + p_a_drift[:-1]
 # jxp_dot, jxp:     (t-1, N, 3, nu, 3)
 # pdot, pddot:      (t-1, nu, 3)
 a_r = np.einsum("tnaub,tub->tna", jxp_dot, pdot[:-1]) + np.einsum("tnaub,tub->tna", jxp_red, pddot)
+
+pddot_fd = (pdot[1:,0] - pdot[:-1,0]) / dt
+print(np.abs(pddot[:-1,0] - pddot_fd[:-1]).max())     # ≪ ‖pddot‖ ?
+print(np.abs(a_r[:, 0] - pddot_fd).max())   # a_r at pin == d(pdot)/dt ?
+
 
 # Currently only zero v initial
 v_r = np.repeat(admm.r.v0[None, ...], T, axis=0)

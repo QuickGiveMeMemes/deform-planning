@@ -102,17 +102,17 @@ namespace diffadmm_wrapper {
                      int ADMM_ITERS, int T, bool bending_admm, bool stretching_admm,
                      bool bending_as_force, double admm_tol, int admm_check_interval);
 
-    py::array_t<double>
-    compute_jxu(NpArray x_hist, NpArray y_hist, NpArray z_hist, NpArray dual_hist,
+    std::tuple<py::array_t<double>, py::array_t<double>, py::array_t<double>>
+    compute_jac(NpArray x0, NpArray x_hist, NpArray y_hist, NpArray z_hist, NpArray dual_hist,
                 NpArray z_bend_hist, NpArray dual_bend_hist, NpArray mass, NpArray A_inv,
-                NpArray L0, NpArray stiffness_stretch, NpArray penalty_stretch,
+                NpArray damping, NpArray L0, NpArray stiffness_stretch, NpArray penalty_stretch,
                 NpArray stiffness_bend, NpArray penaltyDt_stretch, NpArray D_bend, NpArray W_bend,
                 NpArray rest_curv, std::vector<int> pin_indices, std::vector<int> t, double dt,
                 double penalty_bend, bool bending_admm, bool stretching_admm, bool bending_as_force,
                 int gmres_m, int gmres_restart, double gmres_tol);
 
-    py::array_t<double>
-    forwards_with_jxu(NpArray x0, NpArray v0, NpArray mass, NpArray L0, NpArray stiffness_stretch,
+    std::tuple<py::array_t<double>, py::array_t<double>, py::array_t<double>>
+    forwards_with_jac(NpArray x0, NpArray v0, NpArray mass, NpArray L0, NpArray stiffness_stretch,
                       NpArray penalty_stretch, NpArray stiffness_bend,
                       std::optional<NpArray> damping, std::vector<int> pin_indices,
                       std::optional<NpArray> pin_positions, double dt, double penalty_bend,
