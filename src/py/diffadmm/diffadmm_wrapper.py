@@ -3,7 +3,7 @@ from typing import List
 from yaml import safe_load
 import numpy as np
 
-import src.diffadmm.diffadmm as diffadmm
+import src.py.diffadmm.diffadmm as diffadmm
 
 
 # TODO: support nonzero velocity ic

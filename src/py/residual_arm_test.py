@@ -7,7 +7,7 @@ import pinocchio as pin
 from scipy.interpolate import interp1d
 from scipy.sparse import csr_array
 
-from src.plotting import upd_plt_arm, gen_plt_from_urdf
+from src.py.plotting import upd_plt_arm, gen_plt_from_urdf
 
 """
 The AGHF becomes least squares

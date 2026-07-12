@@ -1,8 +1,8 @@
 from matplotlib import animation
 import numpy as np
 import time
-from src.diffadmm.diffadmm_wrapper import Deformable, DeformableConfig
-from src.plotting import plot_init_rope, upd_plt_rope
+from src.py.diffadmm.diffadmm_wrapper import Deformable, DeformableConfig
+from src.py.plotting import plot_init_rope, upd_plt_rope
 
 B = 1
 T = 20

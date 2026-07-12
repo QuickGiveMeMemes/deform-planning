@@ -11,4 +11,4 @@ cmake .. -Dpybind11_DIR=$PYBIND_PATH
 make -j$(nproc)
 
 SO_NAME=$(basename $(find . -name "diffadmm.*.so" | head -n 1))
-mv ./${SO_NAME} ../../src/diffadmm/${SO_NAME}
+mv ./${SO_NAME} ../../src/py/diffadmm/${SO_NAME}

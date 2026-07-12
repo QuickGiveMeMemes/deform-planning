@@ -5,8 +5,8 @@ import matplotlib.pyplot as plt
 import sys
 import pinocchio as pin
 
-from src.diffadmm.diffadmm_wrapper import Deformable, DeformableConfig
-from src.plotting import upd_plt_arm, gen_plt_from_urdf, plot_init_rope, upd_plt_rope
+from src.py.diffadmm.diffadmm_wrapper import Deformable, DeformableConfig
+from src.py.plotting import upd_plt_arm, gen_plt_from_urdf, plot_init_rope, upd_plt_rope
 
 """
 Tests forward dynamics to be used in the AGHF
