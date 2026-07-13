@@ -1,5 +1,7 @@
 #pragma once
 
+// TODO split this into like 5 files
+
 // Residual-based arm-rope optimizer. The rope dynamics residual is enforced via the
 // dual ALM flow, while the arm control is minimized via least-squares
 //
@@ -18,22 +20,22 @@
 #include <pinocchio/parsers/urdf.hpp> 
 #include <pinocchio/algorithm/joint-configuration.hpp>
 
-#include "../leap-discrete/refactored_codebase_v1/include/leap/examples/trajectory_problem.hpp"
-#include "../leap-discrete/refactored_codebase_v1/include/leap/model/robot_config.hpp"
-#include "../leap-discrete/refactored_codebase_v1/include/leap/model/robot_model.hpp"
-#include "../leap-discrete/refactored_codebase_v1/include/leap/problem/constraint_base.hpp"
-#include "../leap-discrete/refactored_codebase_v1/include/leap/problem/constraints.hpp"
-#include "../leap-discrete/refactored_codebase_v1/include/leap/problem/costs.hpp"
-#include "../leap-discrete/refactored_codebase_v1/include/leap/problem/mode_spec.hpp"
-#include "../leap-discrete/refactored_codebase_v1/include/leap/spectral/spectral_ops.hpp"
-#include "../leap-discrete/refactored_codebase_v1/include/leap/transcription/compiled_problem.hpp"
-#include "../leap-discrete/refactored_codebase_v1/include/leap/transcription/layout.hpp"
-#include "../leap-discrete/refactored_codebase_v1/include/leap/transcription/parameterization.hpp"
+#include <leap/examples/trajectory_problem.hpp>
+#include <leap/model/robot_config.hpp>
+#include <leap/model/robot_model.hpp>
+#include <leap/problem/constraint_base.hpp>
+#include <leap/problem/constraints.hpp>
+#include <leap/problem/costs.hpp>
+#include <leap/problem/mode_spec.hpp>
+#include <leap/spectral/spectral_ops.hpp>
+#include <leap/transcription/compiled_problem.hpp>
+#include <leap/transcription/layout.hpp>
+#include <leap/transcription/parameterization.hpp>
 
-#include "../leap-discrete/refactored_codebase_v1/include/leap/core/node_dims.hpp"
-#include "../leap-discrete/refactored_codebase_v1/include/leap/core/node_quantities.hpp"
+#include <leap/core/node_dims.hpp>
+#include <leap/core/node_quantities.hpp>
 
-#include "rope_model.hpp"
+#include "../coupling/rope_model.hpp"
 
 namespace leap::examples {
     

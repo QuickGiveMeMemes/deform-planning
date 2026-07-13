@@ -1,4 +1,4 @@
-#include "../../include/rope_model.hpp"
+#include "../../include/coupling/rope_model.hpp"
 #include <Eigen/Dense>
 #include <vector>
 
