@@ -25,19 +25,18 @@ DynamicRopeModel::DynamicRopeModel(const RopeParams r) : r(std::move(r)) {
     }
 }
 
-// Private helper for splitting into (free, pinned)
-std::tuple<std::vector<int>, std::vector<int>> split(const DynamicRopeModel & r) {
+std::tuple<std::vector<int>, std::vector<int>> DynamicRopeModel::split() const {
     
-    const int N = r.r.rest_pos.rows();
+    const int N = r.rest_pos.rows();
 
     // Mask for efficiency
     std::vector<bool> pinned(N, false);
-    for (auto i : r.r.pinned_idx)
+    for (auto i : r.pinned_idx)
         pinned[i] = true;
 
     std::vector<int> p, f;
-    p.reserve(r.r.pinned_idx.size());
-    f.reserve(N - r.r.pinned_idx.size());
+    p.reserve(r.pinned_idx.size());
+    f.reserve(N - r.pinned_idx.size());
 
     for (int i = 0; i < N; ++i) {
         for (int j = 0; j < 3; ++j) {
@@ -94,12 +93,12 @@ DynamicRopeModel::elastic_grad(
             grad.segment(3 * idx[a], 3) += stencil[a] * f;
     }
     
-    const auto [free, pinned] = split(*this);
+    const auto [free, pinned] = split();
     return {grad(free), grad(pinned)};
 }
 
 
-std::tuple<Eigen::MatrixXd, Eigen::MatrixXd> 
+std::tuple<Eigen::MatrixXd, Eigen::MatrixXd, Eigen::MatrixXd> 
 DynamicRopeModel::elastic_hess(
     const Eigen::Ref<const Eigen::MatrixXd> & R, int mode) const {
     
@@ -150,7 +149,11 @@ DynamicRopeModel::elastic_hess(
         }
     }
     
-    const auto [free, pinned] = split(*this);
-    return {K(free, free), K(free, pinned)};
+    const auto [free, pinned] = split();
+    return {
+        K(free, free), 
+        K(free, pinned),
+        K(pinned, pinned)
+    };
 }
 

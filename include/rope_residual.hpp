@@ -39,59 +39,240 @@ namespace leap::examples {
     
     namespace pin = pinocchio;
 
+    struct PinSpec { int vertex; std::string frameName; };
+
+    // Pinned vertices are not decision variables in this structure
+    //
+    // Rope residual dual constraint enforcing 0 = Ma + grad (sum of elastic energies)
     struct RopeConstraint final : public ConstraintBase {
-        RopeConstraint(const RobotModel &m, const RopeParams &r, std::vector<pin::FrameIndex> pinned)
-            : actIdx_(m.actuatedIdx()), r(DynamicRopeModel(r)), nv_(m.nv()), name_("dyn") {}
+
+        // TODO add checking of coincidence between pinned nodes and corresponding rope vert so the physics do not blow up
+        // Monitor frames assumed to be specified already
+        RopeConstraint(const RobotModel& m, const RopeParams& rp, std::vector<PinSpec> pins)
+            :   rope_(rp), nq_arm_(m.nq()), nv_arm_(m.nv()), nvert_(rp.rest_pos.rows()), name_("rope") {
+            
+            // Pinned are not decision variables, they are queried from the robot model
+            // Sort by vertex so pinVert_/pinSlot_ are ascending == split()'s pinned DOF order
+            std::sort(pins.begin(), pins.end(),
+                    [](const PinSpec& a, const PinSpec& b) { return a.vertex < b.vertex; });
+
+            std::unordered_map<std::string, int> slotOf;
+            for (int i = 0; i < m.nMonitors(); ++i) 
+                slotOf[m.monitorName(i)] = i;
+
+            is_pin_.assign(nvert_, 0);
+            
+            for (const PinSpec& p : pins) {
+                auto it = slotOf.find(p.frameName);
+                if (it == slotOf.end())
+                    throw std::runtime_error("RopeConstraint: pin frame '" + p.frameName +
+                                            "' is not a registered monitor frame");
+
+                is_pin_[p.vertex] = 1;
+                pinVert_.push_back(p.vertex);    // rope-vertex index
+                pinSlot_.push_back(it->second);  // monitor slot (indexes monPos/monJ)
+            }
+
+            npin_  = static_cast<int>(pins.size());
+            nfree_ = nvert_ - npin_;
+            for (int v = 0; v < nvert_; ++v)
+                if (!is_pin_[v]) for (int j = 0; j < 3; ++j) 
+                    freeDof_.push_back(3 * v + j);
+            
+            mass_free_ = rp.mass(freeDof_);
+        }
 
         const std::string &name() const override { return name_; }
-        int rows(const NodeDims &) const override { return nv_; }
+        int rows(const NodeDims &) const override { return 3 * nfree_; }
         Sense sense() const override { return Sense::Equality; }
-        unsigned modelNeeds() const override {
-            return kRnea | kRneaDerivs;
-        }
+        unsigned modelNeeds() const override { return kMonitorPos; }
 
         void value(const NodeQuantities &P, const NodeDims &, const ModelEvalCache &c,
                    Eigen::Ref<Eigen::VectorXd> g) const override {
-
             
+            // TODO: currently nodequantities -> r is flat->non-flat->flat, can make more efficient
+            const auto R = buildR(P, c);
 
-                
-            g = c.gdyn; // tau - sum_c Jc' lam_c (folded by evalNode; == tau when cs empty)
-            for (size_t j = 0; j < actIdx_.size(); ++j)
-                g(actIdx_[j]) -= P.u(static_cast<Eigen::Index>(j));
+            auto [grad_f, grad_p] = rope_.elastic_grad(R, 0);
+            const auto [grad_f_b, grad_p_b] = rope_.elastic_grad(R, 1);
+            grad_f += grad_f_b;
+            grad_p += grad_p_b;
+
+            g = mass_free_.asDiagonal() * P.a.tail(3 * nfree_) + grad_f;
         }
 
-        void jacobian(const NodeQuantities &, const NodeDims &d, const ModelEvalCache &c,
+        void jacobian(const NodeQuantities &P, const NodeDims &d, const ModelEvalCache &c,
                       MatRef J) const override {
+            
+            // J is of size (n_r_free, 3 * n)
+
+            const auto R = buildR(P, c);
+
+            auto [Kff, Kfp, Kpp] = rope_.elastic_hess(R, 0);
+            const auto [Kff_b, Kfp_b, Kpp_b] = rope_.elastic_hess(R, 1);
+            
+            Kff += Kff_b;
+            Kfp += Kfp_b;
+
+            Eigen::MatrixXd Jp(3 * npin_, nv_arm_);
+            for (int i = 0; i < npin_; ++i) 
+                Jp.middleRows(3 * i, 3) = c.monJ[pinSlot_[i]];
+            
             J.setZero();
-            J.middleCols(d.offQ(), d.nq) = c.dgdyn_dq; // == dtau_dq when cs empty
-            J.middleCols(d.offV(), d.nv) = c.dtau_dv;
-            J.middleCols(d.offA(), d.na) = c.M; // dtau/da = mass matrix
-            int o = 0;
-            for (const ContactRef &cr : cs_.active) { // skipped when cs empty
-                J.middleCols(d.offLam() + o, cr.dim) =
-                    -c.footJ[static_cast<size_t>(cr.index)].transpose();
-                o += cr.dim;
+            J.middleCols(d.offQ(), nq_arm_) = Kfp * Jp; // == dtau_dq when cs empty
+            J.middleCols(d.offQ() + nq_arm_, 3 * nfree_) = Kff;
+            J.middleCols(d.offA() + nv_arm_, 3 * nfree_) = mass_free_.asDiagonal(); // dtau/da = mass matrix
+            
+        }
+
+        // No hessian
+
+        Eigen::MatrixXd buildR(const NodeQuantities& P, const ModelEvalCache& c) const {
+            
+            Eigen::MatrixXd R(nvert_, 3);
+            auto xr = P.q.tail(3 * nfree_);
+            int fi = 0, pi = 0; // free, pinned
+
+            for (int v = 0; v < nvert_; ++v) {
+                if (is_pin_[v]) 
+                    R.row(v) = c.monPos[pinSlot_[pi++]].transpose();
+                else            
+                    R.row(v) = xr.segment(3 * fi++, 3).transpose();
             }
-            for (size_t j = 0; j < actIdx_.size(); ++j)
-                J(actIdx_[j], d.offU() + static_cast<int>(j)) = -1.0; // -B u
+            return R;
         }
 
-        // H += sum_i w_i d2 g_i / dz2 via the analytic SO-RNEA provider (empty cs =>
-        // pure SO-RNEA, no contact kernel). Same shape as the frame-constraint Hessians.
-        void addContractedHessian(const NodeQuantities &P, const NodeDims &d, Workspace &ws,
-                                  const Eigen::Ref<const Eigen::VectorXd> &w,
-                                  Eigen::MatrixXd &H) const override {
-            ws.z.resize(d.nP());
-            P.toVector(d, ws.z);
-            ws.tapes->addDynHessian(d, cs_, ws.z, w, H);
-        }
-
-        std::vector<int> actIdx_;
-        DynamicRopeModel r;
-        int nv_;
+        DynamicRopeModel rope_;
+        std::vector<char> is_pin_;
+        std::vector<int>  pinVert_, pinSlot_, freeDof_;
+        Eigen::VectorXd   mass_free_;
+        int nq_arm_, nv_arm_, nvert_, nfree_ = 0, npin_ = 0;
         std::string name_;
+
     };
+
+    // TODO: a lot of code repetition between this and the rope residual, could structure in a cleaner form
+    struct ArmControlCost final : public CostBase {
+
+        ArmControlCost(const RobotModel& m, const RopeParams& rp, std::vector<PinSpec> pins)
+            :   rope_(rp), nq_arm_(m.nq()), nv_arm_(m.nv()), nvert_(rp.rest_pos.rows()), name_("arm") {
+            
+            // Pinned are not decision variables, they are queried from the robot model
+            // Sort by vertex so pinVert_/pinSlot_ are ascending == split()'s pinned DOF order
+            std::sort(pins.begin(), pins.end(),
+                    [](const PinSpec& a, const PinSpec& b) { return a.vertex < b.vertex; });
+
+            std::unordered_map<std::string, int> slotOf;
+            for (int i = 0; i < m.nMonitors(); ++i) 
+                slotOf[m.monitorName(i)] = i;
+
+            is_pin_.assign(nvert_, 0);
+            
+            for (const PinSpec& p : pins) {
+                auto it = slotOf.find(p.frameName);
+                if (it == slotOf.end())
+                    throw std::runtime_error("RopeConstraint: pin frame '" + p.frameName +
+                                            "' is not a registered monitor frame");
+
+                is_pin_[p.vertex] = 1;
+                pinVert_.push_back(p.vertex);    // rope-vertex index
+                pinSlot_.push_back(it->second);  // monitor slot (indexes monPos/monJ)
+            }
+
+            npin_  = static_cast<int>(pins.size());
+            nfree_ = nvert_ - npin_;
+
+            // TODO can delete probably
+            for (int v = 0; v < nvert_; ++v)
+                if (!is_pin_[v]) 
+                    for (int j = 0; j < 3; ++j) 
+                        freeDof_.push_back(3 * v + j);
+            
+            mass_pinned_ = rp.mass(pinVert_);
+        }
+
+        unsigned modelNeeds() const override {  return kRnea | kRneaDerivs | kMonitorPos; }
+
+        double value(const NodeQuantities& P, const NodeDims&, const ModelEvalCache& c) const override {
+
+            // "residual" force of pinned nodes is the reaction force
+            // This does not include the inertial force of the pinned node as it is
+            // quite a significant calculation chain for not much gain
+            // i.e. F_react = J_p^T[Ma+grad (elastic force)]_pinned, but
+            // Ma is discarded
+            //
+            // TODO, should be able to disable reaction if necessary
+
+            const auto R = buildR(P, c);
+
+            auto [grad_f, grad_p] = rope_.elastic_grad(R, 0);
+            const auto [grad_f_b, grad_p_b] = rope_.elastic_grad(R, 1);
+            grad_p += grad_p_b; // Elastic reaction
+
+            Eigen::MatrixXd Jp(3 * npin_, nv_arm_);
+            for (int i = 0; i < npin_; ++i) 
+                Jp.middleRows(3 * i, 3) = c.monJ[pinSlot_[i]];
+
+            // Least squares 1/2 || Ha + C + Jp^T(reaction) ||
+            return (c.tau + Jp.transpose() * grad_p).squaredNorm() / 2.0;
+        }
+
+        void gradient(const NodeQuantities& P, const NodeDims& d, const ModelEvalCache& c,
+                        Eigen::Ref<Eigen::VectorXd> g_P) const override {
+            
+            const auto R = buildR(P, c);
+            
+            auto [Kff, Kfp, Kpp] = rope_.elastic_hess(R, 0);
+            const auto [Kff_b, Kfp_b, Kpp_b] = rope_.elastic_hess(R, 1);
+            
+            Kff += Kff_b;
+            Kfp += Kfp_b;
+            Kpp += Kpp_b;
+            
+            // Some more code repetition
+            auto [grad_f, grad_p] = rope_.elastic_grad(R, 0);
+            const auto [grad_f_b, grad_p_b] = rope_.elastic_grad(R, 1);
+            grad_p += grad_p_b; // Elastic reaction
+                    
+            Eigen::MatrixXd Jp(3 * npin_, nv_arm_);
+            for (int i = 0; i < npin_; ++i) 
+                Jp.middleRows(3 * i, 3) = c.monJ[pinSlot_[i]];
+
+            Eigen::VectorXd u = c.tau + Jp.transpose() * grad_p;
+            
+            g_P.setZero();
+            g_P.segment(d.offQ(), nq_arm_) = c.dtau_dq.transpose() * u + Jp.transpose() * Kpp * Jp * u;
+            g_P.segment(d.offQ() + nq_arm_, nfree_ * 3) = Kfp * Jp * u;
+            g_P.segment(d.offV(), nv_arm_) = c.dtau_dv.transpose() * u;
+            g_P.segment(d.offA(), nv_arm_) = c.M * u;
+        }
+
+
+        Eigen::MatrixXd buildR(const NodeQuantities& P, const ModelEvalCache& c) const {
+            
+            Eigen::MatrixXd R(nvert_, 3);
+            auto xr = P.q.tail(3 * nfree_);
+            int fi = 0, pi = 0; // free, pinned
+
+            for (int v = 0; v < nvert_; ++v) {
+                if (is_pin_[v]) 
+                    R.row(v) = c.monPos[pinSlot_[pi++]].transpose();
+                else            
+                    R.row(v) = xr.segment(3 * fi++, 3).transpose();
+            }
+            return R;
+        }
+
+        DynamicRopeModel rope_;
+        std::vector<char> is_pin_;
+        std::vector<int>  pinVert_, pinSlot_, freeDof_;
+        Eigen::VectorXd   mass_pinned_;
+        int nq_arm_, nv_arm_, nvert_, nfree_ = 0, npin_ = 0;
+        std::string name_;
+        
+    };
+
+
 
     // Contiguous index list [first, first+count) into a per-node [q;v;a;lam;u] vector.
     inline std::vector<int> indexRange(int first, int count) {

@@ -25,10 +25,14 @@ struct DynamicRopeModel {
     // r is current rope state, mode: 0 -> stretching, 1 -> bending
     std::tuple<Eigen::VectorXd, Eigen::VectorXd> elastic_grad(const Eigen::Ref<const Eigen::MatrixXd> & r, int mode) const;
 
-    // Calculates and returns hessian in format (free, pinned)
+    // Calculates and returns hessian in format (Kff, Kfp, Kpp)
     // Stretching, Bending: (3N, 3N)
     // r is current rope state, mode: 0 -> stretching, 1 -> bending
-    std::tuple<Eigen::MatrixXd, Eigen::MatrixXd> elastic_hess(const Eigen::Ref<const Eigen::MatrixXd> & r, int mode) const;
+    std::tuple<Eigen::MatrixXd, Eigen::MatrixXd, Eigen::MatrixXd> elastic_hess(const Eigen::Ref<const Eigen::MatrixXd> & r, int mode) const;
+
+    // Helper for (free, pinned) splitting
+    std::tuple<std::vector<int>, std::vector<int>> split() const;
+
 };
 
 // Discrete-time rope dynamics for diffADMM integration
