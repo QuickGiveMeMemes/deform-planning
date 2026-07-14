@@ -274,7 +274,36 @@ namespace leap::examples {
         
     };
 
+    // Soft least-squares boundary cost
+    // struct BoundaryCost final : public CostBase {
 
+    //     // i0 is based on total indexing (NodeQuantities::atP())
+    //     BoundaryCost(int i0, Eigen::VectorXd target, double k)
+    //         : i0_(i0), target_(std::move(target)),
+    //             len_(static_cast<int>(target_.size())), k_(k) {}
+
+    //     unsigned modelNeeds() const override { return 0u; }
+
+    //     double value(const NodeQuantities& P, const NodeDims& d, const ModelEvalCache&) const override {
+    //         double s = 0.0;
+    //         for (int j = 0; j < len_; ++j) { 
+    //             const double e = P.atP(d, i0_ + j) - target_(j); 
+    //             s += e * e; 
+    //         }
+    //         return 0.5 * k_ * s;
+    //     }
+
+    //     void gradient(const NodeQuantities& P, const NodeDims& d, const ModelEvalCache&,
+    //                     Eigen::Ref<Eigen::VectorXd> g_P) const override {
+    //         g_P.setZero();
+    //         for (int j = 0; j < len_; ++j)
+    //             g_P(i0_ + j) = k_ * (P.atP(d, i0_ + j) - target_(j));
+    //     }
+
+    //     Eigen::VectorXd target_;
+    //     int i0_, len_;
+    //     double k_;
+    // };
 
     // Contiguous index list [first, first+count) into a per-node [q;v;a;lam;u] vector.
     inline std::vector<int> indexRange(int first, int count) {
@@ -291,98 +320,117 @@ namespace leap::examples {
     // arm): a throwaway probe model with no actuation is valid and lets us read
     // jointNames() (q/v order, "universe" excluded) to fill the list generically.
     // Pass an explicit list for an under-actuated fixed-base robot.
-    inline RobotConfig fixedBaseArmConfig(const std::string &urdfPath,
-                                          const Eigen::Vector3d &gravity = Eigen::Vector3d(0.0, 0.0,
-                                                                                           -9.81),
-                                          std::vector<std::string> actuatedJoints = {}) {
+    inline RobotConfig armConfig(const std::string &urdfPath,
+            const std::vector<std::string> &pinnedFrames,
+            const Eigen::Vector3d &gravity = Eigen::Vector3d(0.0, 0.0,-9.81)) {
+        
         RobotConfig cfg;
         cfg.urdfPath = urdfPath;
         cfg.gravity = gravity;
-        if (actuatedJoints.empty()) {
-            RobotConfig probe;
-            probe.urdfPath = urdfPath;
-            probe.gravity = gravity; // actuatedJoints empty => nu=0 probe, valid
-            const RobotModel m0 = RobotModel::fromUrdf(probe);
-            actuatedJoints = m0.jointNames();
-        }
-        cfg.actuatedJoints = std::move(actuatedJoints);
+        
+        // const RobotModel m0 = RobotModel::fromUrdf(probe);
+        cfg.actuatedJoints = {};
+
+        cfg.monitorFrames = pinnedFrames;
         return cfg;
     }
 
-    // TrajectoryProblem for a fixed-base arm reach. Builds the model, a single mode
-    // (dynamics at every node; q,v pinned at both ends; optional joint/velocity/torque
-    // box limits) under FullStateParam, and a linear-pose-interpolation initial guess.
-    class FixedBaseReachProblem final : public TrajectoryProblem {
+
+    class ContinuousRopeResidualProblem final : public TrajectoryProblem {
       public:
-        FixedBaseReachProblem(const std::string &urdfPath, const Eigen::Vector3d &gravity,
-                              Eigen::VectorXd q0, Eigen::VectorXd v0, Eigen::VectorXd qf,
-                              Eigen::VectorXd vf, double T, int degree, bool enforceLimits) {
+        ContinuousRopeResidualProblem(const std::string &urdfPath, const Eigen::Vector3d &gravity,
+                                Eigen::VectorXd q0_arm, Eigen::VectorXd v0_arm, 
+                                Eigen::MatrixXd x0_r, Eigen::MatrixXd v0_r, // Full arm config (pinned will be removed)
+                                Eigen::VectorXd qf_arm, Eigen::VectorXd vf_arm, 
+                                Eigen::MatrixXd xf_r, // Eigen::MatrixXd vf_r,
+                                RopeParams & rin,
+                                std::vector<PinSpec> pins,
+                                double T, int degree, bool enforceLimits) : rp(rin) {
+            
             if (degree < 4)
                 throw std::invalid_argument(
-                    "FixedBaseReachProblem: degree must be >= 4 (need interior DOF beyond the "
+                    "Degree must be >= 4 (need interior DOF beyond the "
                     "two-point q/v boundary conditions)");
             if (T <= 0.0)
-                throw std::invalid_argument("FixedBaseReachProblem: T must be > 0");
+                throw std::invalid_argument("T must be > 0");
+            
+            std::vector<std::string> pinned; pinned.reserve(rin.pinned_idx.size());
+            for (auto & p : pins) {
+                pinned.push_back(p.frameName);
+            }
 
             model_ = std::make_shared<RobotModel>(
-                RobotModel::fromUrdf(fixedBaseArmConfig(urdfPath, gravity)));
+                RobotModel::fromUrdf(armConfig(urdfPath, pinned, gravity)));
             param_ = std::make_shared<FullStateParam>();
             const RobotModel &m = *model_;
-            const int nq = m.nq(), nv = m.nv(), nu = m.nu();
-            auto checkSize = [](const Eigen::VectorXd &x, int n, const char *what) {
-                if (static_cast<int>(x.size()) != n)
-                    throw std::invalid_argument(std::string("FixedBaseReachProblem: ") + what +
-                                                " has wrong size");
-            };
-            checkSize(q0, nq, "q0");
-            checkSize(qf, nq, "qf");
-            checkSize(v0, nv, "v0");
-            checkSize(vf, nv, "vf");
+            const int nq_arm = m.nq(), nv_arm = m.nv();
 
             const ContactSet none{};
-            const NodeDims d = m.nodeDims(none);
+
+            const int n_rope = rin.rest_pos.rows();
+            const int n_free = n_rope - rin.pinned_idx.size();
+            const int N3 = n_rope * 3; // xyz
+            const int N3f = n_free * 3;
+
+            auto x0_r_flat = x0_r.reshaped<Eigen::RowMajor>();
+            auto v0_r_flat = v0_r.reshaped<Eigen::RowMajor>();
+            auto xf_r_flat = xf_r.reshaped<Eigen::RowMajor>();
+            // auto vf_r_flat = vf_r.reshaped<Eigen::RowMajor>();
+            
+            // nlam, nu should be 0
+            NodeDims d;
+            d.nq = m.nq();
+            d.nv = m.nv();
+            d.na = m.nv();
+
             using W = ConstraintAttachment::Where;
 
             ModeSpec ms;
+            ms.extraDims = N3f;
             ms.degree = degree;
             ms.T = T;
             ms.contacts = none;
-            // Manipulator dynamics at every node.
-            ms.attachments.push_back({std::make_shared<RopeConstraint>(m, none), W::AllNodes});
-            // Boundary conditions: pin q and v at t=0 (FirstNode) and t=T (LastNode).
-            // q0/qf are copied (not moved): buildInitialGuess reads them below; v0/vf are
-            // consumed only here, so they may be moved.
+            
+            // Node-enforced rope dynamics
+            ms.attachments.push_back({std::make_shared<RopeConstraint>(m, rp, pins), W::AllNodes});
+            
+            // Boundary conditions
             ms.attachments.push_back(
-                {std::make_shared<PinConstraint>(indexRange(0, nq), q0, "pin_q0"), W::FirstNode});
+                {std::make_shared<PinConstraint>(indexRange(d.offQ(), nq_arm), q0_arm, "pin_q0_arm"), W::FirstNode}
+            );
             ms.attachments.push_back(
-                {std::make_shared<PinConstraint>(indexRange(d.offV(), nv), std::move(v0), "pin_v0"),
-                 W::FirstNode});
+                {std::make_shared<PinConstraint>(indexRange(d.offV(), nv_arm), v0_arm, "pin_v0_arm"), W::FirstNode}
+            );
             ms.attachments.push_back(
-                {std::make_shared<PinConstraint>(indexRange(0, nq), qf, "pin_qf"), W::LastNode});
+                {std::make_shared<PinConstraint>(indexRange(d.offQ() + nq_arm, N3f), x0_r_flat, "pin_x0_rope"), W::FirstNode}
+            );
             ms.attachments.push_back(
-                {std::make_shared<PinConstraint>(indexRange(d.offV(), nv), std::move(vf), "pin_vf"),
-                 W::LastNode});
-            // Physical limits from the URDF (opt-in). Position/velocity apply at interior
-            // nodes only (the endpoints are already pinned to within-limits states);
-            // torque applies everywhere. +/-inf sentinels auto-disable a side, so joints
-            // the URDF leaves unbounded cost no rows.
-            if (enforceLimits) {
-                ms.attachments.push_back(
-                    {std::make_shared<BoxConstraint>(BoxField::Q, indexRange(0, nq),
-                                                     m.lowerPositionLimit(), m.upperPositionLimit(),
-                                                     "box_q"),
-                     W::Interior});
-                const Eigen::VectorXd vlim = m.velocityLimit();
-                ms.attachments.push_back({std::make_shared<BoxConstraint>(
-                                              BoxField::V, indexRange(0, nv), -vlim, vlim, "box_v"),
-                                          W::Interior});
-                const Eigen::VectorXd ulim = m.actuatedEffortLimit();
-                ms.attachments.push_back({std::make_shared<BoxConstraint>(
-                                              BoxField::U, indexRange(0, nu), -ulim, ulim, "box_u"),
-                                          W::AllNodes});
-            }
-            ms.costs = {std::make_shared<ControlEffortCost>()};
+                {std::make_shared<PinConstraint>(indexRange(d.offV() + nv_arm, N3f), v0_r_flat, "pin_v0_rope"), W::FirstNode}
+            );
+            
+            ms.attachments.push_back(
+                {std::make_shared<PinConstraint>(indexRange(d.offQ(), nq_arm), qf_arm, "pin_qf_arm"), W::LastNode}
+            );
+            ms.attachments.push_back(
+                {std::make_shared<PinConstraint>(indexRange(d.offV(), nv_arm), vf_arm, "pin_vf_arm"), W::LastNode}
+            );
+            
+            
+            // Final rope conditions are soft costs instead of hard constraints
+            // not anymore
+            
+            // Only enforcing position, at least until LEAP supports location-specific cost
+            ms.attachments.push_back(
+                {std::make_shared<PinConstraint>(indexRange(d.offQ() + nq_arm, N3f), xf_r_flat, "pin_xf_rope"), W::LastNode}
+            );
+
+            ms.costs.push_back(std::make_shared<ArmControlCost>(m, rp, pins));
+            
             spec_.modes = {std::move(ms)}; // single mode; spec_.resets stays empty
+
+            Eigen::VectorXd q0(d.nq), qf(d.nq);
+            q0 << q0_arm, x0_r_flat;
+            qf << qf_arm, xf_r_flat;
 
             buildInitialGuess(q0, qf);
         }
@@ -418,6 +466,8 @@ namespace leap::examples {
         }
 
         std::shared_ptr<RobotModel> model_;
+        RopeParams rp;
+
         std::shared_ptr<const Parameterization> param_;
         MultiModeSpec spec_;
         Eigen::VectorXd y0_;

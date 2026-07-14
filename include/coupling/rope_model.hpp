@@ -3,7 +3,6 @@
 #include <Eigen/Dense>
 #include <tuple>
 #include <vector>
-#include <Eigen/Dense>
 
 struct RopeParams {
     Eigen::MatrixXd rest_pos; // (N, 3) baseline for stretching, bending calculations
