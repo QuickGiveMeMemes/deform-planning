@@ -26,41 +26,37 @@ set(PROJECT_ROOT "${CMAKE_CURRENT_SOURCE_DIR}")
 set(PROJECT_INC  "${PROJECT_ROOT}/include")
 set(PROJECT_SRC  "${PROJECT_ROOT}/src/cpp")
 
-find_package(pybind11 CONFIG REQUIRED)
 find_package(Kokkos REQUIRED)
 find_package(Eigen3 REQUIRED CONFIG)
-find_package(pinocchio CONFIG QUIET)
+find_package(pinocchio CONFIG REQUIRED)
+find_package(yaml-cpp REQUIRED)
+find_library(CPPAD_LIBRARY NAMES cppad_lib cppad HINTS $ENV{CONDA_PREFIX}/lib /opt/homebrew/lib)
+find_path(CPPAD_INCLUDE_DIR cppad/cppad.hpp HINTS $ENV{CONDA_PREFIX}/include /opt/homebrew/include)
 
+file(GLOB_RECURSE LEAP_SOURCES CONFIGURE_DEPENDS ${LEAP_SRC}/*.cpp)
+list(FILTER LEAP_SOURCES EXCLUDE REGEX ".*/(apps|examples/apps|bin)/.*")
 
-# pybind11_add_module(diffadmm
-#   ${CMAKE_CURRENT_SOURCE_DIR}/diffadmm_pybind.cpp
-#   ${CMAKE_CURRENT_SOURCE_DIR}/diffadmm_wrapper.cpp
-#   ${DIFFADMM_SRC}/admm_forward.cpp
-#   ${DIFFADMM_SRC}/admm_backward.cpp
-#   ${DIFFADMM_SRC}/admm_utils.cpp)
+add_library(leap STATIC ${LEAP_SOURCES})
+target_include_directories(leap PUBLIC 
+  ${LEAP_INC}
+  ${CPPAD_INCLUDE_DIR})
+target_link_libraries(leap PUBLIC 
+ Eigen3::Eigen 
+ pinocchio::pinocchio
+ ${CPPAD_LIBRARY})
+find_package(OpenMP)
+if(OpenMP_CXX_FOUND)
+  target_link_libraries(leap PUBLIC OpenMP::OpenMP_CXX)   # kkt_assembler's #pragma omp
+endif()
 
-# target_include_directories(diffadmm PRIVATE
-#   ${CMAKE_CURRENT_SOURCE_DIR}        
-#   ${DIFFADMM_INC})   
+add_executable(rope_residual 
+  ${PROJECT_SRC}/rope_residual_opt.cpp
+  ${PROJECT_SRC}/rope_model.cpp)
 
-# target_link_libraries(diffadmm PRIVATE 
-#   pybind11::module
-#   Kokkos::kokkos
-# )
+target_include_directories(rope_residual PRIVATE
+  ${PROJECT_INC}
+  ${DIFFADMM_INC})
 
-# For Linting (temporary)
-add_library( dummy OBJECT
-    ${PROJECT_SRC}/dummy.cpp
-)
-
-target_include_directories(dummy PRIVATE
-    ${PROJECT_INC}
-    ${LEAP_INC}
-    ${DIFFADMM_INC}
-)
-
-target_link_libraries(dummy PRIVATE 
-  pybind11::module
-  Kokkos::kokkos
-  Eigen3::Eigen
-)
+target_link_libraries(rope_residual PRIVATE
+  leap                 # brings LEAP_INC + Eigen + pinocchio transitively
+  yaml-cpp)            # or yaml-cpp::yaml-cpp on newer yaml-cpp

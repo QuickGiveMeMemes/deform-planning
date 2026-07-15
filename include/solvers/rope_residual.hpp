@@ -7,6 +7,7 @@
 //
 // Ha+C=u -> least squares 1/2 || Ha+C ||^2 in cost
 
+#include <algorithm>
 #include <memory>
 #include <pinocchio/multibody/fwd.hpp>
 #include <stdexcept>
@@ -82,6 +83,10 @@ namespace leap::examples {
                     freeDof_.push_back(3 * v + j);
             
             mass_free_ = rp.mass(freeDof_);
+
+            grav_free_.resize(3 * nfree_);
+            for (int i = 0; i < nfree_; ++i) 
+                grav_free_.segment<3>(3 * i) = Eigen::Vector3d(0, 0, -9.8); // currently hardcoded
         }
 
         const std::string &name() const override { return name_; }
@@ -100,7 +105,7 @@ namespace leap::examples {
             grad_f += grad_f_b;
             grad_p += grad_p_b;
 
-            g = mass_free_.asDiagonal() * P.a.tail(3 * nfree_) + grad_f;
+            g = mass_free_.asDiagonal() *( P.a.tail(3 * nfree_) - grav_free_) + grad_f;
         }
 
         void jacobian(const NodeQuantities &P, const NodeDims &d, const ModelEvalCache &c,
@@ -147,7 +152,7 @@ namespace leap::examples {
         DynamicRopeModel rope_;
         std::vector<char> is_pin_;
         std::vector<int>  pinVert_, pinSlot_, freeDof_;
-        Eigen::VectorXd   mass_free_;
+        Eigen::VectorXd   mass_free_, grav_free_;
         int nq_arm_, nv_arm_, nvert_, nfree_ = 0, npin_ = 0;
         std::string name_;
 
@@ -189,8 +194,6 @@ namespace leap::examples {
                 if (!is_pin_[v]) 
                     for (int j = 0; j < 3; ++j) 
                         freeDof_.push_back(3 * v + j);
-            
-            mass_pinned_ = rp.mass(pinVert_);
         }
 
         unsigned modelNeeds() const override {  return kRnea | kRneaDerivs | kMonitorPos; }
@@ -345,7 +348,7 @@ namespace leap::examples {
                                 Eigen::MatrixXd xf_r, // Eigen::MatrixXd vf_r,
                                 RopeParams & rin,
                                 std::vector<PinSpec> pins,
-                                double T, int degree, bool enforceLimits) : rp(rin) {
+                                double T, int degree) : rp(rin) {
             
             if (degree < 4)
                 throw std::invalid_argument(
@@ -353,8 +356,25 @@ namespace leap::examples {
                     "two-point q/v boundary conditions)");
             if (T <= 0.0)
                 throw std::invalid_argument("T must be > 0");
+
+            const int n_rope = rin.rest_pos.rows();
+            const int N3 = n_rope * 3; // xyz
+            
+            std::vector<char> is_pin(n_rope, 0);
+            for (const PinSpec& p : pins) 
+                is_pin[p.vertex] = 1;
+            
+            std::vector<int> freeVerts;
+            
+            for (int v = 0; v < n_rope; ++v) 
+                if (!is_pin[v]) 
+                    freeVerts.push_back(v);
+            
+            const int n_free = static_cast<int>(freeVerts.size());
+            const int N3f = 3 * n_free;
             
             std::vector<std::string> pinned; pinned.reserve(rin.pinned_idx.size());
+
             for (auto & p : pins) {
                 pinned.push_back(p.frameName);
             }
@@ -367,21 +387,22 @@ namespace leap::examples {
 
             const ContactSet none{};
 
-            const int n_rope = rin.rest_pos.rows();
-            const int n_free = n_rope - rin.pinned_idx.size();
-            const int N3 = n_rope * 3; // xyz
-            const int N3f = n_free * 3;
 
-            auto x0_r_flat = x0_r.reshaped<Eigen::RowMajor>();
-            auto v0_r_flat = v0_r.reshaped<Eigen::RowMajor>();
-            auto xf_r_flat = xf_r.reshaped<Eigen::RowMajor>();
+            auto freeFlat = [&](const Eigen::MatrixXd& X) -> Eigen::VectorXd {
+                const Eigen::MatrixXd Xf = X(freeVerts, Eigen::all);   // n_free x 3
+                return Xf.transpose().reshaped();                      // [x0,y0,z0,x1,...] == DOF 3*v+j
+            };
+
+            const Eigen::VectorXd   x0f = freeFlat(x0_r), 
+                                    v0f = freeFlat(v0_r),
+                                    xff = freeFlat(xf_r);
             // auto vf_r_flat = vf_r.reshaped<Eigen::RowMajor>();
             
             // nlam, nu should be 0
             NodeDims d;
-            d.nq = m.nq();
-            d.nv = m.nv();
-            d.na = m.nv();
+            d.nq = m.nq() + N3f;
+            d.nv = m.nv() + N3f;
+            d.na = m.nv() + N3f;
 
             using W = ConstraintAttachment::Where;
 
@@ -402,10 +423,10 @@ namespace leap::examples {
                 {std::make_shared<PinConstraint>(indexRange(d.offV(), nv_arm), v0_arm, "pin_v0_arm"), W::FirstNode}
             );
             ms.attachments.push_back(
-                {std::make_shared<PinConstraint>(indexRange(d.offQ() + nq_arm, N3f), x0_r_flat, "pin_x0_rope"), W::FirstNode}
+                {std::make_shared<PinConstraint>(indexRange(d.offQ() + nq_arm, N3f), x0f, "pin_x0_rope"), W::FirstNode}
             );
             ms.attachments.push_back(
-                {std::make_shared<PinConstraint>(indexRange(d.offV() + nv_arm, N3f), v0_r_flat, "pin_v0_rope"), W::FirstNode}
+                {std::make_shared<PinConstraint>(indexRange(d.offV() + nv_arm, N3f), v0f, "pin_v0_rope"), W::FirstNode}
             );
             
             ms.attachments.push_back(
@@ -421,7 +442,7 @@ namespace leap::examples {
             
             // Only enforcing position, at least until LEAP supports location-specific cost
             ms.attachments.push_back(
-                {std::make_shared<PinConstraint>(indexRange(d.offQ() + nq_arm, N3f), xf_r_flat, "pin_xf_rope"), W::LastNode}
+                {std::make_shared<PinConstraint>(indexRange(d.offQ() + nq_arm, N3f), xff, "pin_xf_rope"), W::LastNode}
             );
 
             ms.costs.push_back(std::make_shared<ArmControlCost>(m, rp, pins));
@@ -429,8 +450,8 @@ namespace leap::examples {
             spec_.modes = {std::move(ms)}; // single mode; spec_.resets stays empty
 
             Eigen::VectorXd q0(d.nq), qf(d.nq);
-            q0 << q0_arm, x0_r_flat;
-            qf << qf_arm, xf_r_flat;
+            q0 << q0_arm, x0f;
+            qf << qf_arm, xff;
 
             buildInitialGuess(q0, qf);
         }
