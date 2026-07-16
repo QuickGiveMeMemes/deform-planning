@@ -1,8 +1,8 @@
 # Paths are from root dir
-urdf: ""
-ropeYAML: ""
+urdf: "src/data/urdf/kinova3_2arm.urdf"
+ropeYAML: "src/data/rope/arm_rope_2pin.yaml"
 
-pinFrames: []
+pinFrames: ["arm1_end_effector_link", "arm2_end_effector_link"]
 
 # Other config items
 deg: 16
@@ -15,16 +15,15 @@ mugrow: 3.0
 tol: 1e-6
 dsSeg: 5e-2
 
-
 # q0 for entire rigid body, specified by urdf
 q0_arm: []
-qf_arm: []
+qf_arm: [1.0, 0.5, 1.0, 1.0, 1.0, 0.5, 1.0, 1.0, 0.5, 1.0, 1.0, 1.0, 0.5, 1.0]
 
 v0_arm: []
 vf_arm: []
 
-q0_rope:
-v0_rope:
+q0_rope: []
+v0_rope: []
 
-qf_rope_enable: false  # if false, is calculated from FK displacement
+qf_rope_enable: false # if false, is calculated from FK displacement
 qf_rope: []

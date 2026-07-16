@@ -41,6 +41,24 @@ using leap::app::printFlowCounts;
 using leap::app::wireAdaptive;
 using leap::app::wireInterNodeReport;
 
+namespace YAML {
+    template <> struct convert<Eigen::VectorXd> {
+        static bool decode(const Node &node, Eigen::VectorXd &vec) {
+            if (!node.IsSequence()) {
+                return false;
+            }
+
+            vec.resize(node.size());
+
+            for (std::size_t i = 0; i < node.size(); ++i) {
+                vec(i) = node[i].as<double>();
+            }
+
+            return true;
+        }
+    };
+} // namespace YAML
+
 namespace leap::examples {
 
     // Finite-difference check of RopeConstraint::jacobian at a given node state.
@@ -132,8 +150,9 @@ namespace leap::examples {
         // --- vertices (N x 3), also the rest configuration ---
         const YAML::Node &vs = y["vertices"];
         const int N = static_cast<int>(vs.size());
-        if (N < 3) throw std::runtime_error("rope yaml: need >= 3 vertices");
-        
+        if (N < 3)
+            throw std::runtime_error("rope yaml: need >= 3 vertices");
+
         rp.rest_pos.resize(N, 3);
         for (int i = 0; i < N; ++i) {
             if (vs[i].size() != 3)
@@ -246,23 +265,34 @@ int main(int argc, char **argv) {
         std::fprintf(stderr, "usage: %s alm [key=val ...]\n", argv[0]);
         return 2;
     }
-    const std::string urdf = args(argc, argv, "urdf", "assets/kinova3_1arm.urdf");
-    const std::string ropeYaml = args(argc, argv, "rope", "assets/arm_rope_1pin.yaml");
-    const std::string pinFrame = args(argc, argv, "pinframe", "arm1_end_effector_link");
-    const int deg = static_cast<int>(argd(argc, argv, "deg", 16));
-    const double T = argd(argc, argv, "T", 3.0);
-    const bool limits = argd(argc, argv, "limits", 0.0) != 0.0; // nu==0: no torque box
-    const bool gn = argd(argc, argv, "gn", 1.0) != 0.0;
-    const bool pfill = argd(argc, argv, "pfill", 1.0) != 0.0;
-    const double muMax = argd(argc, argv, "mumax", 1e7);
-    const double mu0 = argd(argc, argv, "mu0", 10.0);
-    const double mugrow = argd(argc, argv, "mugrow", 3.0);
-    const double tol = argd(argc, argv, "tol", 1e-6);
-    const double dsSeg = argd(argc, argv, "dsseg", 5e-2);
-    const double sMax = argd(argc, argv, "smax", 3.0);
-    const int stallFlow = static_cast<int>(argd(argc, argv, "stall", 6));
-    const double stallRel = argd(argc, argv, "stallrel", 1e-2);
-    const int interNodeReport = static_cast<int>(argd(argc, argv, "internode", 16));
+
+    // Parse a ton of parameters
+    const std::string problem = args(argc, argv, "problem", "src/data/problems/2arm1rope_v1.yaml");
+    YAML::Node config = YAML::LoadFile(problem);
+
+    const std::string urdf = config["urdf"].as<std::string>();
+    const std::string ropeYaml =
+        config["ropeYaml"].as<std::string>("src/data/rope/arm_rope_2pin.yaml");
+    const std::vector<std::string> frames = config["pinFrames"].as<std::vector<std::string>>();
+
+    const int deg = config["deg"].as<int>(16);
+    const double T = config["T"].as<double>(3.0);
+
+    const bool limits = config["limits"].as<bool>(false);
+    const bool gn = config["gn"].as<bool>(true);
+    const bool pfill = config["pfill"].as<bool>(true);
+
+    const double muMax = config["muMax"].as<double>(1e7);
+    const double mu0 = config["mu0"].as<double>(10.0);
+    const double mugrow = config["mugrow"].as<double>(3.0);
+    const double tol = config["tol"].as<double>(1e-6);
+    const double dsSeg = config["dsSeg"].as<double>(5e-2);
+    const double sMax = config["sMax"].as<double>(3.0);
+
+    const int stallFlow = config["stallFlow"].as<int>(6);
+    const double stallRel = config["stallRel"].as<double>(1e-2);
+    const int interNodeReport = config["interNodeReport"].as<int>(16);
+
     const Eigen::Vector3d gravity(0.0, 0.0, -9.81);
 
     // RopeConstraint has no addContractedHessian -> exact Newton would silently drop
@@ -273,6 +303,7 @@ int main(int argc, char **argv) {
     }
 
     leap::SolverBackend backend = leap::SolverBackend::EigenLDLT;
+
     try {
         backend = leap::parseBackend(args(argc, argv, "backend", "accelu"));
     } catch (const std::exception &e) {
@@ -286,34 +317,27 @@ int main(int argc, char **argv) {
     std::vector<leap::examples::PinSpec> pins;
     int nq = 0, nv = 0, nRope = 0, nFree = 0;
 
+    // Read rope configs
     try {
         ry = leap::examples::loadRopeYaml(ropeYaml);
         RopeParams &rp = ry.rp;
         nRope = static_cast<int>(rp.rest_pos.rows());
         nFree = nRope - static_cast<int>(rp.pinned_idx.size());
-        if (nFree <= 0)
-            throw std::runtime_error("rope yaml: every vertex is pinned");
 
-        // One frame per pinned vertex, in yaml order. Single-pin config here; for
-        // multi-pin, take a comma-separated pinframe list and zip with pinned_idx.
-        const std::string pinFrames =
-            args(argc, argv, "pinframes", "arm1_end_effector_link,arm2_end_effector_link");
-        std::vector<std::string> frames;
-        {
-            std::stringstream ss(pinFrames);
-            std::string f;
-            while (std::getline(ss, f, ','))
-                if (!f.empty())
-                    frames.push_back(f);
+        if (nFree <= 0) {
+            throw std::runtime_error("rope yaml: every vertex is pinned");
         }
+
         if (frames.size() != rp.pinned_idx.size()) {
             std::string e = "kinova_rope: pinframes count != yaml pinned count: " +
                             std::to_string(frames.size()) + ", " +
                             std::to_string(rp.pinned_idx.size());
             throw std::runtime_error(e);
         }
-        for (size_t i = 0; i < frames.size(); ++i)
+
+        for (size_t i = 0; i < frames.size(); ++i) {
             pins.push_back({rp.pinned_idx[i], frames[i]}); // yaml order == frame order
+        }
 
         const leap::RobotModel probe =
             leap::RobotModel::fromUrdf(leap::examples::armConfig(urdf, frames, gravity));
@@ -322,10 +346,10 @@ int main(int argc, char **argv) {
         // pinFrame in both and FK here matches FK at solve time.
         nq = probe.nq();
         nv = probe.nv();
-        q0 = vecArg(argc, argv, "q0", nq, "");
-        v0 = vecArg(argc, argv, "v0", nv, "");
-        qf = vecArg(argc, argv, "qf", nq, "1.0,0.5,1.0,1.0,1.0,0.5,1.0");
-        vf = vecArg(argc, argv, "vf", nv, "");
+        q0 = config["q0"].as<Eigen::VectorXd>(Eigen::VectorXd::Zero(nq));
+        v0 = config["v0"].as<Eigen::VectorXd>(Eigen::VectorXd::Zero(nv));
+        qf = config["qf"].as<Eigen::VectorXd>();
+        vf = config["vf"].as<Eigen::VectorXd>(Eigen::VectorXd::Zero(nv));
 
         // FK/pins are verified consistent at q0, so the yaml shape is the initial state.
         x0_r = rp.rest_pos;
@@ -342,11 +366,12 @@ int main(int argc, char **argv) {
         // Sanity: the pinned vertex must sit on its frame at q0 (else the elastic
         // residual starts huge and the pin constraint fights FK).
         const double pinErr = (x0_r.row(rp.pinned_idx[0]).transpose() - p0).norm();
-        if (pinErr > 1e-6)
+        if (pinErr > 1e-6) {
             std::fprintf(stderr,
                          "kinova_rope: WARNING pinned vertex %d is %.3e m from "
                          "frame '%s' at q0\n",
-                         rp.pinned_idx[0], pinErr, pinFrame.c_str());
+                         rp.pinned_idx[0], pinErr, frames[rp.pinned_idx[0]].c_str());
+        }
     } catch (const std::exception &e) {
         std::fprintf(stderr, "kinova_rope: %s\n", e.what());
         return 2;
@@ -358,21 +383,28 @@ int main(int argc, char **argv) {
 
     const leap::SegmentLayout &sl = prob.layout().seg[0];
     const Eigen::VectorXd y0 = probObj.initialGuess();
-    leap::TrajectoryView V(y0.data(), sl);
     const int k = sl.Nn / 2; // an interior node
+
+    leap::TrajectoryView V(y0.data(), sl);
     Eigen::VectorXd z(sl.dims.nP());
     V.node(k).toVector(sl.dims, z);
+
     leap::examples::RopeConstraint con(*probObj.model(), ry.rp, pins);
     fdCheckRope(*probObj.model(), con, sl.dims, z, leap::ContactSet{}, 1e-6);
 
     std::printf("[kinova_rope|alm] urdf=%s  rope=%s\n"
                 "  arm: nq=%d nv=%d nu=0 (control eliminated)   decision nq=%d\n"
-                "  rope: n=%d free=%d pin=v%d@%s  ks=%.3g  bend=%s(kb=%.3g)  damping=%s\n"
+                "  rope: n=%d free=%d pin=v%d@  ks=%.3g  bend=%s(kb=%.3g)  damping=%s\n"
                 "  deg=%d T=%.2f  gn=ON  mumax=%.3g  backend=%s\n",
                 urdf.c_str(), ropeYaml.c_str(), nq, nv, nq + 3 * nFree, nRope, nFree,
-                ry.rp.pinned_idx[0], pinFrame.c_str(), ry.rp.kstretch(0), "ON",
+                ry.rp.pinned_idx[0], ry.rp.kstretch(0), "ON",
                 ry.rp.kbend.size() ? ry.rp.kbend(0) : 0.0, "UNMODELED", deg, T, muMax,
                 leap::backendName(backend));
+    std::printf("Pinned frames: ");
+    for (const std::string &f : frames) {
+        std::printf("%s ", f.c_str());
+    }
+    std::printf("\n");
 
     leap::KktAssembler asmb(prob, probObj.formulation());
     asmb.setParallelFill(pfill);
@@ -393,40 +425,54 @@ int main(int argc, char **argv) {
     cfg.stallRel = stallRel;
     cfg.keepBest = true;
     cfg.backend = backend;
+
     wireAdaptive(cfg, argc, argv);
     cfg.header = "[kinova_rope|alm] single-phase coupled Nesterov flow (MuStall cap " +
                  std::to_string(muMax) + ", s_max=" + std::to_string(sMax) +
                  ", backend=" + leap::backendName(backend) + ")";
     cfg.onReport = leap::io::printViolationsByKind;
+
     wireInterNodeReport(cfg, interNodeReport);
 
     Eigen::VectorXd y = probObj.initialGuess();
+
     const auto t0 = std::chrono::steady_clock::now();
+
     leap::CoupledFlowDriver driver(asmb, pen, makeMomentum(argc, argv), cfg);
     leap::FlowReport rep = driver.run(y);
+
     const char *tag = "[kinova_rope|alm]";
+
     printFlowCounts(tag, rep);
     printAdaptive(tag, rep);
+
     const double wall =
         std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
+
     std::printf("\n%s TOTAL %.1f s  (converged=%d, max|c_eff|=%.3e at s=%.3f)\n", tag, wall,
                 static_cast<int>(rep.converged), rep.maxViol, rep.s);
 
     // Judging: full space, zero duals (mu-free feasibility gate).
     leap::EvalCache cache = asmb.makeCache();
+
     {
         Eigen::VectorXd yJ = y;
         yJ.tail(prob.layout().md).setZero();
         asmb.evaluate(yJ, pen.muRow(), {}, cache);
     }
+
     leap::io::printGroupViolations(prob, cache);
     leap::io::printViolationsByKind(prob, cache);
+
     std::printf("  gate (zero-dual) max|c| = %.3e   ||dZ/ds|| = %.3e\n", cache.maxViol,
                 cache.F.head(prob.layout().np).norm());
+
     leap::io::printInterNodeViolations(prob, y);
 
     leap::io::writeSolutionViz(prob, cache, y, "sol_kinova_rope_alm", urdf);
+
     std::printf("solution written to sol_kinova_rope_alm_mode0.csv (+ _meta.json, "
                 "_cons_mode0.csv)\n");
+
     return 0;
 }

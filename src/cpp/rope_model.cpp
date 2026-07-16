@@ -11,22 +11,18 @@ DynamicRopeModel::DynamicRopeModel(const RopeParams r) : r(std::move(r)) {
 
     for (int i = 0; i < N - 1; ++i) {
         // Assumes initial configuration is rest length
-        rest_length(i) = (
-            r.rest_pos.row(i + 1) - 
-            r.rest_pos.row(i)).norm();
+        rest_length(i) = (r.rest_pos.row(i + 1) - r.rest_pos.row(i)).norm();
     }
 
     for (int i = 0; i < N - 2; ++i) {
         // Assumes initial configuration is rest curvature
-        rest_curv(i) = (
-            r.rest_pos.row(i) -
-            2 * r.rest_pos.row(i + 1) +
-            r.rest_pos.row(i + 2)).norm();
+        rest_curv(i) =
+            (r.rest_pos.row(i) - 2 * r.rest_pos.row(i + 1) + r.rest_pos.row(i + 2)).norm();
     }
 }
 
 std::tuple<std::vector<int>, std::vector<int>> DynamicRopeModel::split() const {
-    
+
     const int N = r.rest_pos.rows();
 
     // Mask for efficiency
@@ -47,10 +43,9 @@ std::tuple<std::vector<int>, std::vector<int>> DynamicRopeModel::split() const {
     return {f, p};
 }
 
-std::tuple<Eigen::VectorXd, Eigen::VectorXd> 
-DynamicRopeModel::elastic_grad(
-    const Eigen::Ref<const Eigen::MatrixXd> & R, int mode) const {
-    
+std::tuple<Eigen::VectorXd, Eigen::VectorXd>
+DynamicRopeModel::elastic_grad(const Eigen::Ref<const Eigen::MatrixXd> &R, int mode) const {
+
     const bool bend = mode == 1;
     const int N = this->r.rest_pos.rows();
 
@@ -75,8 +70,7 @@ DynamicRopeModel::elastic_grad(
             g = (R.row(i - 1) - 2 * R.row(i) + R.row(i + 1)).transpose();
             idx = {i - 1, i, i + 1};
             stencil = {1, -2, 1};
-        } 
-        else {
+        } else {
             l = 2;
             rest = rest_length(i);
             k = this->r.kstretch(i);
@@ -87,21 +81,20 @@ DynamicRopeModel::elastic_grad(
 
         const double norm = std::max(g.norm(), 1e-9);
         const Eigen::Vector3d ghat = g / norm;
-        const Eigen::Vector3d f = k * (norm - rest) * ghat; // Term k( ||g|| - rest ) ghat (before D^T matmul)
+        const Eigen::Vector3d f =
+            k * (norm - rest) * ghat; // Term k( ||g|| - rest ) ghat (before D^T matmul)
 
         for (int a = 0; a < l; ++a)
             grad.segment(3 * idx[a], 3) += stencil[a] * f;
     }
-    
+
     const auto [free, pinned] = split();
     return {grad(free), grad(pinned)};
 }
 
+std::tuple<Eigen::MatrixXd, Eigen::MatrixXd, Eigen::MatrixXd>
+DynamicRopeModel::elastic_hess(const Eigen::Ref<const Eigen::MatrixXd> &R, int mode) const {
 
-std::tuple<Eigen::MatrixXd, Eigen::MatrixXd, Eigen::MatrixXd> 
-DynamicRopeModel::elastic_hess(
-    const Eigen::Ref<const Eigen::MatrixXd> & R, int mode) const {
-    
     const bool bend = mode == 1;
     const int N = this->r.rest_pos.rows();
 
@@ -126,8 +119,7 @@ DynamicRopeModel::elastic_hess(
             g = (R.row(i - 1) - 2 * R.row(i) + R.row(i + 1)).transpose();
             idx = {i - 1, i, i + 1};
             stencil = {1, -2, 1};
-        } 
-        else {
+        } else {
             l = 2;
             rest = rest_length(i);
             k = this->r.kstretch(i);
@@ -138,22 +130,16 @@ DynamicRopeModel::elastic_hess(
 
         const double norm = std::max(g.norm(), 1e-9);
         const Eigen::Vector3d ghat = g / norm;
-        
+
         const Eigen::Matrix3d gg = ghat * ghat.transpose();
-        const Eigen::Matrix3d A = 
-            k * (gg + (1 - rest / norm) * (Eigen::Matrix3d::Identity() - gg));
-        
+        const Eigen::Matrix3d A = k * (gg + (1 - rest / norm) * (Eigen::Matrix3d::Identity() - gg));
+
         for (int a = 0; a < l; ++a)
             for (int b = 0; b < l; ++b) {
                 K.block<3, 3>(3 * idx[a], 3 * idx[b]) += stencil[a] * stencil[b] * A;
-        }
+            }
     }
-    
-    const auto [free, pinned] = split();
-    return {
-        K(free, free), 
-        K(free, pinned),
-        K(pinned, pinned)
-    };
-}
 
+    const auto [free, pinned] = split();
+    return {K(free, free), K(free, pinned), K(pinned, pinned)};
+}
