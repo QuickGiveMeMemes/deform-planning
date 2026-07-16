@@ -7,7 +7,7 @@ from mpl_toolkits.mplot3d import Axes3D  # noqa: F401
 
 from src.py.plotting import gen_plt_from_urdf, upd_plt_arm
 
-URDF   = "./src/data/urdf/kinova3_1arm.urdf"
+URDF   = "./src/data/urdf/kinova3_2arm.urdf"
 CSV    = "sol_kinova_rope_alm_mode0.csv"
 FRAME  = "arm1_end_effector_link"
 PINNED = [0]
@@ -85,7 +85,7 @@ def animate(model, data, t, q_arm, R, fps=8):
 
     segs = gen_plt_from_urdf(ax, model, data, q_arm[0])
     (rope,) = ax.plot3D(*R[0].T, "o-", ms=4, lw=1.5, color="tab:red", label="rope")
-    (pt,)   = ax.plot3D(*R[0, :1].T, "*", ms=14, color="tab:green", label="pin")
+    # (pt,)   = ax.plot3D(*R[0, :1].T, "*", ms=14, color="tab:green", label="pin")
     lo, hi = R.reshape(-1, 3).min(0), R.reshape(-1, 3).max(0)
     c, r = (lo + hi) / 2, max(hi - lo) / 2 + 0.1
     for setl, i in ((ax.set_xlim, 0), (ax.set_ylim, 1), (ax.set_zlim, 2)):
@@ -93,7 +93,7 @@ def animate(model, data, t, q_arm, R, fps=8):
     ax.legend(fontsize=8); ttl = ax.set_title("")
     def upd(k):
         upd_plt_arm(segs, model, data, q_arm[k])
-        rope.set_data_3d(*R[k].T); pt.set_data_3d(*R[k, :1].T)
+        rope.set_data_3d(*R[k].T); # pt.set_data_3d(*R[k, :1].T)
         ttl.set_text(f"node {k}/{len(t)-1}   t={t[k]:.3f}s")
     return FuncAnimation(fig, upd, frames=len(t), interval=1000/fps)
 

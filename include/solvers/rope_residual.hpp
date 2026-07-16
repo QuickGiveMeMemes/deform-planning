@@ -441,9 +441,9 @@ namespace leap::examples {
             // not anymore
             
             // Only enforcing position, at least until LEAP supports location-specific cost
-            ms.attachments.push_back(
-                {std::make_shared<PinConstraint>(indexRange(d.offQ() + nq_arm, N3f), xff, "pin_xf_rope"), W::LastNode}
-            );
+            // ms.attachments.push_back(
+            //     {std::make_shared<PinConstraint>(indexRange(d.offQ() + nq_arm, N3f), xff, "pin_xf_rope"), W::LastNode}
+            // );
 
             ms.costs.push_back(std::make_shared<ArmControlCost>(m, rp, pins));
             

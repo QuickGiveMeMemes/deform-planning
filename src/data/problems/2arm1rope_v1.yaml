@@ -1,0 +1,30 @@
+# Paths are from root dir
+urdf: ""
+ropeYAML: ""
+
+pinFrames: []
+
+# Other config items
+deg: 16
+T: 2.0
+gn: true
+pfill: true
+mumax: 1e7
+mu0: 10
+mugrow: 3.0
+tol: 1e-6
+dsSeg: 5e-2
+
+
+# q0 for entire rigid body, specified by urdf
+q0_arm: []
+qf_arm: []
+
+v0_arm: []
+vf_arm: []
+
+q0_rope:
+v0_rope:
+
+qf_rope_enable: false  # if false, is calculated from FK displacement
+qf_rope: []

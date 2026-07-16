@@ -1,0 +1,39 @@
+# Two-arm rope, HALF span, ARCHING (matches original rest curvature; stiff rod).
+# N = 10, span 0.90 m, half-period sine (orig shape scaled by 0.4737).
+#   y = -0.02485 + 0.03789*sin(pi*x/0.9)
+#   z = 1.187385 + 0.07105*sin(pi*x/0.9)
+# v0  == arm1_end_effector_link @ q=0 = [0, -0.02485, 1.187385]
+# v9 == arm2_end_effector_link @ q=0 (arm2 base xyz="0.9 0 0", NO rotation)
+vertices:
+  - [0.000000, -0.024850, 1.187385]
+  - [0.100000, -0.011889, 1.211686]
+  - [0.200000, -0.000492, 1.233057]
+  - [0.300000, 0.007968, 1.248918]
+  - [0.400000, 0.012469, 1.257358]
+  - [0.500000, 0.012469, 1.257358]
+  - [0.600000, 0.007968, 1.248918]
+  - [0.700000, -0.000492, 1.233057]
+  - [0.800000, -0.011889, 1.211686]
+  - [0.900000, -0.024850, 1.187385]
+ 
+mass:
+  mass_uniform: true
+  mass: 0.2   # kg/vertex; keeps ~total mass at N=10
+  mass_arr: []
+ 
+damping:
+  damping_uniform: true
+  damping: 0.1
+  damping_arr: []
+ 
+stretching:
+  enable: true
+  stiffness: 1e1
+ 
+bending:
+  enable_bending: false
+  bending_as_force: true
+  k_bend: 1e0
+ 
+control:
+  pinned: [0, 9]
