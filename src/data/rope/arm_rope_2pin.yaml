@@ -28,7 +28,7 @@ damping:
  
 stretching:
   enable: true
-  stiffness: 1e1
+  stiffness: 20
  
 bending:
   enable_bending: false

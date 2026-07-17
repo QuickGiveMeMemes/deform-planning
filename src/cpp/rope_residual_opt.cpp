@@ -259,27 +259,36 @@ namespace {
     }
 
     // x is expected size
-    Eigen::VectorXd yaml_vec(const std::string& key, const YAML::Node& config, const int x) {
-        
+    Eigen::VectorXd yaml_vec(const std::string &key, const YAML::Node &config, const int x) {
+
         auto v = config[key].as<std::vector<double>>();
-        if (v.size() != x) 
-            throw std::invalid_argument("Yaml vector size does not correspond: '" + key + "', expected, actual: " 
-                                        + std::to_string(x) + ", " + std::to_string(v.size()));
+        if (v.size() != x)
+            throw std::invalid_argument("Yaml vector size does not correspond: '" + key +
+                                        "', expected, actual: " + std::to_string(x) + ", " +
+                                        std::to_string(v.size()));
         Eigen::VectorXd v_targ = Eigen::VectorXd::Zero(x);
-        for (int i = 0; i < x; ++i) v_targ(i) = v[i];
+        for (int i = 0; i < x; ++i) {
+            v_targ(i) = v[i];
+        }
         return v_targ;
     }
 
-    Eigen::MatrixXd yaml_mat(const std::string& key, const YAML::Node& config, const int x, const int y) {
+    Eigen::MatrixXd yaml_mat(const std::string &key, const YAML::Node &config, const int x,
+                             const int y) {
         auto m = config[key].as<std::vector<std::vector<double>>>();
-        if (m.size() != x || m[0].size() != y) 
-            throw std::invalid_argument("Yaml vector size does not correspond: '" + key + "', expected, actual: (" 
-                                        + std::to_string(x) + ',' + std::to_string(y) + "), (" 
-                                        + std::to_string(m.size()) + ',' + std::to_string(m[0].size()) + ')');
+        if (m.size() != x || m[0].size() != y) {
+            throw std::invalid_argument("Yaml vector size does not correspond: '" + key +
+                                        "', expected, actual: (" + std::to_string(x) + ',' +
+                                        std::to_string(y) + "), (" + std::to_string(m.size()) +
+                                        ',' + std::to_string(m[0].size()) + ')');
+        }
         Eigen::MatrixXd m_targ = Eigen::MatrixXd::Zero(x, y);
-        for (int i = 0; i < x; ++i) 
-            for (int j = 0; j < y; ++j) 
+
+        for (int i = 0; i < x; ++i) {
+            for (int j = 0; j < y; ++j) {
                 m_targ(i, j) = m[i][j];
+            }
+        }
         return m_targ;
     }
 
@@ -313,7 +322,7 @@ int main(int argc, char **argv) {
     const double mugrow = config["mugrow"].as<double>(3.0);
     const double tol = config["tol"].as<double>(1e-6);
     const double dsSeg = config["dsSeg"].as<double>(5e-2);
-    const double sMax = config["sMax"].as<double>(3.0);
+    const double sMax = config["sMax"].as<double>(3);
 
     const int stallFlow = config["stallFlow"].as<int>(6);
     const double stallRel = config["stallRel"].as<double>(1e-2);
@@ -370,29 +379,27 @@ int main(int argc, char **argv) {
         qf = yaml_vec("qf_arm", config, nq);
         vf = yaml_vec("vf_arm", config, nv);
 
-
         // if (q0.size() != nq || qf.size() != nq || v0.size() != nv || vf.size() != nv) {
         //     throw std::invalid_argument("Arm configuration size mismatch");
         // }
 
         // FK/pins are verified consistent at q0, so the yaml shape is the initial state.
         x0_r = yaml_mat("q0_rope", config, nRope, 3);
-        v0_r =yaml_mat("v0_rope", config, nRope, 3);
+        v0_r = yaml_mat("v0_rope", config, nRope, 3);
 
         const Eigen::Vector3d p0 = monitorPos0(probe, q0);
         const Eigen::Vector3d pf = monitorPos0(probe, qf);
 
         if (config["qf_rope_enable"].as<bool>(false)) {
             xf_r = yaml_mat("qf_rope", config, nRope, 3);
-        }
-        else {
+        } else {
             // Terminal target: rigidly translate the shape by the pin's FK displacement
             // q0 -> qf. Preserves the elastic state (so the target is a reachable-ish rope
             // configuration) and keeps the pinned vertex coincident with FK(qf).
             xf_r = x0_r;
             xf_r.rowwise() += (pf - p0).transpose();
         }
-    
+
         // Sanity: the pinned vertex must sit on its frame at q0 (else the elastic
         // residual starts huge and the pin constraint fights FK).
 

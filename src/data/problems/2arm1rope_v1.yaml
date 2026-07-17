@@ -1,6 +1,6 @@
 # Paths are from root dir
 urdf: "./src/data/urdf/kinova3_2arm.urdf"
-ropeYAML: "./src/data/rope/arm_rope_2pin.yaml"
+ropeYaml: "./src/data/rope/arm_rope_2pin.yaml"
 
 pinFrames: ["arm1_end_effector_link", "arm2_end_effector_link"]
 
@@ -8,11 +8,12 @@ pinFrames: ["arm1_end_effector_link", "arm2_end_effector_link"]
 deg: 16
 T: 2.0
 pfill: true
-mumax: 1e7
 mu0: 10
-mugrow: 3.0
+mugrow: 3
 tol: 1e-6
 dsSeg: 5e-2
+sMax: 3 # 1.5
+muMax: 1e7
 
 # q0 for entire rigid body, specified by urdf
 q0_arm: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]

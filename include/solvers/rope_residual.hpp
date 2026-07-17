@@ -64,16 +64,18 @@ namespace leap::examples {
                       [](const PinSpec &a, const PinSpec &b) { return a.vertex < b.vertex; });
 
             std::unordered_map<std::string, int> slotOf;
-            for (int i = 0; i < m.nMonitors(); ++i)
+            for (int i = 0; i < m.nMonitors(); ++i) {
                 slotOf[m.monitorName(i)] = i;
+            }
 
             is_pin_.assign(nvert_, 0);
 
             for (const PinSpec &p : pins) {
                 auto it = slotOf.find(p.frameName);
-                if (it == slotOf.end())
+                if (it == slotOf.end()) {
                     throw std::runtime_error("RopeConstraint: pin frame '" + p.frameName +
                                              "' is not a registered monitor frame");
+                }
 
                 is_pin_[p.vertex] = 1;
                 pinVert_.push_back(p.vertex);   // rope-vertex index
@@ -82,16 +84,20 @@ namespace leap::examples {
 
             npin_ = static_cast<int>(pins.size());
             nfree_ = nvert_ - npin_;
-            for (int v = 0; v < nvert_; ++v)
-                if (!is_pin_[v])
-                    for (int j = 0; j < 3; ++j)
+            for (int v = 0; v < nvert_; ++v) {
+                if (!is_pin_[v]) {
+                    for (int j = 0; j < 3; ++j) {
                         freeDof_.push_back(3 * v + j);
+                    }
+                }
+            }
 
             mass_free_ = rp.mass(freeDof_);
 
             grav_free_.resize(3 * nfree_);
-            for (int i = 0; i < nfree_; ++i)
+            for (int i = 0; i < nfree_; ++i) {
                 grav_free_.segment<3>(3 * i) = Eigen::Vector3d(0, 0, -9.8); // currently hardcoded
+            }
         }
 
         const std::string &name() const override { return name_; }
@@ -146,10 +152,11 @@ namespace leap::examples {
             int fi = 0, pi = 0; // free, pinned
 
             for (int v = 0; v < nvert_; ++v) {
-                if (is_pin_[v])
+                if (is_pin_[v]) {
                     R.row(v) = c.monPos[pinSlot_[pi++]].transpose();
-                else
+                } else {
                     R.row(v) = xr.segment(3 * fi++, 3).transpose();
+                }
             }
             return R;
         }
@@ -183,9 +190,10 @@ namespace leap::examples {
 
             for (const PinSpec &p : pins) {
                 auto it = slotOf.find(p.frameName);
-                if (it == slotOf.end())
+                if (it == slotOf.end()) {
                     throw std::runtime_error("RopeConstraint: pin frame '" + p.frameName +
                                              "' is not a registered monitor frame");
+                }
 
                 is_pin_[p.vertex] = 1;
                 pinVert_.push_back(p.vertex);   // rope-vertex index
@@ -195,11 +203,13 @@ namespace leap::examples {
             npin_ = static_cast<int>(pins.size());
             nfree_ = nvert_ - npin_;
 
-            // TODO can delete probably
-            for (int v = 0; v < nvert_; ++v)
+            // TODO can delete probably - freeDof_ is unused
+            for (int v = 0; v < nvert_; ++v) {
                 if (!is_pin_[v])
-                    for (int j = 0; j < 3; ++j)
+                    for (int j = 0; j < 3; ++j) {
                         freeDof_.push_back(3 * v + j);
+                    }
+            }
         }
 
         unsigned modelNeeds() const override { return kRnea | kRneaDerivs | kMonitorPos; }
@@ -431,12 +441,15 @@ namespace leap::examples {
             ms.attachments.push_back({std::make_shared<PinConstraint>(indexRange(d.offQ(), nq_arm),
                                                                       q0_arm, "pin_q0_arm"),
                                       W::FirstNode});
+
             ms.attachments.push_back({std::make_shared<PinConstraint>(indexRange(d.offV(), nv_arm),
                                                                       v0_arm, "pin_v0_arm"),
                                       W::FirstNode});
+
             ms.attachments.push_back({std::make_shared<PinConstraint>(
                                           indexRange(d.offQ() + nq_arm, N3f), x0f, "pin_x0_rope"),
                                       W::FirstNode});
+
             ms.attachments.push_back({std::make_shared<PinConstraint>(
                                           indexRange(d.offV() + nv_arm, N3f), v0f, "pin_v0_rope"),
                                       W::FirstNode});
@@ -444,6 +457,7 @@ namespace leap::examples {
             ms.attachments.push_back({std::make_shared<PinConstraint>(indexRange(d.offQ(), nq_arm),
                                                                       qf_arm, "pin_qf_arm"),
                                       W::LastNode});
+
             ms.attachments.push_back({std::make_shared<PinConstraint>(indexRange(d.offV(), nv_arm),
                                                                       vf_arm, "pin_vf_arm"),
                                       W::LastNode});
