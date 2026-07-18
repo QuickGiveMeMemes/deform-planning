@@ -77,12 +77,17 @@ target_include_directories(rope_residual PRIVATE
 target_link_libraries(rope_residual PRIVATE leap yaml-cpp)     
 
 # This breaks everything
+# target_compile_definitions(leap PUBLIC EIGEN_MAX_ALIGN_BYTES=16)
 # include(CheckCXXCompilerFlag)
 # check_cxx_compiler_flag("-march=native" HAS_MARCH_NATIVE)
 # if(HAS_MARCH_NATIVE)
 #   target_compile_options(leap PUBLIC -march=native)
 #   target_compile_options(rope_residual PUBLIC -march=native)
 # endif()
+
+# target_compile_options(leap PUBLIC -march=native -fno-omit-frame-pointer -fsanitize=address -g)
+# target_compile_options(rope_residual PUBLIC -march=native -fno-omit-frame-pointer -fsanitize=address -g)
+# target_link_options(rope_residual PRIVATE -fsanitize=address)
 
 # target_compile_options(rope_residual PRIVATE -fno-omit-frame-pointer -g)
 # target_link_options(rope_residual PRIVATE -no-pie)
