@@ -12,7 +12,7 @@ mu0: 10
 mugrow: 3
 tol: 1e-6
 dsSeg: 5e-2
-sMax: 3 # 1.5
+sMax: 2
 muMax: 1e7
 
 # q0 for entire rigid body, specified by urdf

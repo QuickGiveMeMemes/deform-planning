@@ -249,15 +249,48 @@ namespace {
 
     // World position of monitor slot 0 at configuration q (v = a = 0), via the same
     // kMonitorPos FK path RopeConstraint reads at solve time.
-    Eigen::Vector3d monitorPos0(const leap::RobotModel &m, const Eigen::VectorXd &q) {
+    std::vector<Eigen::Vector3d> monitorPosAll(const leap::RobotModel &m,
+                                               const Eigen::VectorXd &q) {
         auto pd = m.makeData();
         leap::ModelEvalCache mec;
         m.initCache(mec);
         const Eigen::VectorXd z = Eigen::VectorXd::Zero(m.nv());
         m.evalNode(*pd, q, z, z, leap::kMonitorPos, mec);
-        return mec.monPos.at(0);
+        return mec.monPos; // slot order == pinFrames order
     }
 
+    // CAlculate rope config at equilibrium
+    Eigen::MatrixXd staticEquilibrium(const DynamicRopeModel &rope,
+                                      Eigen::MatrixXd R, // initial guess = rest shape
+                                      const std::vector<int> &freeVerts,
+                                      const Eigen::VectorXd &mass_free,
+                                      const Eigen::Vector3d &g = {0, 0, -9.8}) {
+        Eigen::VectorXd Mg(mass_free.size());
+        for (int i = 0; i < mass_free.size() / 3; ++i) {
+            Mg.segment<3>(3 * i) = mass_free(3 * i) * g;
+        }
+
+        for (int it = 0; it < 100; ++it) {
+            auto [gf_s, gp_s] = rope.elastic_grad(R, 0);
+            auto [gf_b, gp_b] = rope.elastic_grad(R, 1);
+            Eigen::VectorXd r = gf_s + gf_b - Mg; // residual on free DOFs
+            if (r.norm() < 1e-10) {
+                break;
+            }
+
+            auto [Kff_s, Kfp_s, Kpp_s] = rope.elastic_hess(R, 0);
+            auto [Kff_b, Kfp_b, Kpp_b] = rope.elastic_hess(R, 1);
+            Eigen::MatrixXd Kff = Kff_s + Kff_b;
+            Kff.diagonal().array() += 1e-8; 
+            Eigen::VectorXd dx = Kff.ldlt().solve(-r);
+
+            int fi = 0;
+            for (int v : freeVerts) {
+                R.row(v) += dx.segment<3>(3 * fi++).transpose();
+            }
+        }
+        return R;
+    }
     // x is expected size
     Eigen::VectorXd yaml_vec(const std::string &key, const YAML::Node &config, const int x) {
 
@@ -387,29 +420,64 @@ int main(int argc, char **argv) {
         x0_r = yaml_mat("q0_rope", config, nRope, 3);
         v0_r = yaml_mat("v0_rope", config, nRope, 3);
 
-        const Eigen::Vector3d p0 = monitorPos0(probe, q0);
-        const Eigen::Vector3d pf = monitorPos0(probe, qf);
+        // Generalized number of pinned vertices
+        std::vector<int> freeVerts;
+        std::vector<char> isPin(nRope, 0);
+        for (int v : ry.rp.pinned_idx) {
+            isPin[v] = 1;
+        }
+        for (int v = 0; v < nRope; ++v) {
+            if (!isPin[v]) {
+                freeVerts.push_back(v);
+            }
+        }
 
-        if (config["qf_rope_enable"].as<bool>(false)) {
-            xf_r = yaml_mat("qf_rope", config, nRope, 3);
-        } else {
-            // Terminal target: rigidly translate the shape by the pin's FK displacement
-            // q0 -> qf. Preserves the elastic state (so the target is a reachable-ish rope
-            // configuration) and keeps the pinned vertex coincident with FK(qf).
-            xf_r = x0_r;
-            xf_r.rowwise() += (pf - p0).transpose();
+        Eigen::VectorXd mass_free(3 * (int)freeVerts.size());
+        for (size_t i = 0; i < freeVerts.size(); ++i) {
+            mass_free.segment<3>(3 * i) = ry.rp.mass.segment<3>(3 * freeVerts[i]);
+        }
+
+        DynamicRopeModel ropeModel(ry.rp);
+
+        const auto pins0 = monitorPosAll(probe, q0);
+        {
+            Eigen::MatrixXd R = x0_r;
+
+            Eigen::Vector3d d = pins0[0] - R.row(ry.rp.pinned_idx[0]).transpose();
+            for (int i = 0; i < R.rows(); ++i) {
+                R.row(i) += d.transpose();
+            }
+
+            for (size_t i = 0; i < ry.rp.pinned_idx.size(); ++i) {
+                R.row(ry.rp.pinned_idx[i]) = pins0[i].transpose();
+            }
+            x0_r = staticEquilibrium(ropeModel, R, freeVerts, mass_free);
+        }
+
+        const auto pinsF = monitorPosAll(probe, qf);
+        {
+            Eigen::MatrixXd R = x0_r;
+
+            Eigen::Vector3d d = pinsF[0] - R.row(ry.rp.pinned_idx[0]).transpose();
+            for (int i = 0; i < R.rows(); ++i) {
+                R.row(i) += d.transpose();
+            }
+
+            for (size_t i = 0; i < ry.rp.pinned_idx.size(); ++i) {
+                R.row(ry.rp.pinned_idx[i]) = pinsF[i].transpose();
+            }
+            xf_r = staticEquilibrium(ropeModel, R, freeVerts, mass_free);
         }
 
         // Sanity: the pinned vertex must sit on its frame at q0 (else the elastic
         // residual starts huge and the pin constraint fights FK).
 
-        // TODO adapt for multiple pinned positions
-        const double pinErr = (x0_r.row(rp.pinned_idx[0]).transpose() - p0).norm();
-        if (pinErr > 1e-6) {
-            std::fprintf(stderr,
-                         "kinova_rope: WARNING pinned vertex %d is %.3e m from "
-                         "frame '%s' at q0\n",
-                         rp.pinned_idx[0], pinErr, frames[rp.pinned_idx[0]].c_str());
+        for (size_t i = 0; i < ry.rp.pinned_idx.size(); ++i) {
+            const double e = (x0_r.row(ry.rp.pinned_idx[i]).transpose() - pins0[i]).norm();
+            if (e > 1e-6) {
+                std::fprintf(stderr, "WARNING pin vertex %d is %.3e m from frame '%s' at q0\n",
+                             ry.rp.pinned_idx[i], e, frames[i].c_str());
+            }
         }
     } catch (const std::exception &e) {
         std::fprintf(stderr, "kinova_rope: %s\n", e.what());
