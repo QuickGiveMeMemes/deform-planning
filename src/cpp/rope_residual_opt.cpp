@@ -534,11 +534,15 @@ int main(int argc, char **argv) {
     cfg.keepBest = true;
     cfg.backend = backend;
 
+    
     wireAdaptive(cfg, argc, argv);
     cfg.header = "[kinova_rope|alm] single-phase coupled Nesterov flow (MuStall cap " +
-                 std::to_string(muMax) + ", s_max=" + std::to_string(sMax) +
-                 ", backend=" + leap::backendName(backend) + ")";
+    std::to_string(muMax) + ", s_max=" + std::to_string(sMax) +
+    ", backend=" + leap::backendName(backend) + ")";
     cfg.onReport = leap::io::printViolationsByKind;
+    
+    cfg.adaptRestartOnShrink = true;
+    // cfg.discreteUpdate = true;
 
     wireInterNodeReport(cfg, interNodeReport);
 
