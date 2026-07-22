@@ -1,0 +1,35 @@
+# AUTO-GENERATED harder case (gen_hard_case.py)
+# N=10 arch sag=0.09 m ; pins [0, 9] == FK(end-effectors) at q0
+vertices:
+  - [-0.266503, 0.033760, 1.136752]
+  - [-0.100469, 0.034447, 1.164851]
+  - [0.065504, 0.035133, 1.189239]
+  - [0.231365, 0.035818, 1.206649]
+  - [0.397074, 0.036503, 1.214660]
+  - [0.562609, 0.037187, 1.211982]
+  - [0.727972, 0.037871, 1.198614]
+  - [0.893183, 0.038554, 1.175847]
+  - [1.058280, 0.039236, 1.146103]
+  - [1.223318, 0.039918, 1.112647]
+ 
+mass:
+  mass_uniform: true
+  mass: 0.2
+  mass_arr: []
+ 
+damping:
+  damping_uniform: true
+  damping: 0.1
+  damping_arr: []
+ 
+stretching:
+  enable: true
+  stiffness: 1e6
+ 
+bending:
+  enable_bending: false
+  bending_as_force: true
+  k_bend: 1e3
+ 
+control:
+  pinned: [0, 9]

@@ -12,6 +12,11 @@ if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE Release CACHE STRING "" FORCE)
 endif()
 
+find_package(Kokkos REQUIRED)
+find_package(Eigen3 REQUIRED CONFIG)
+find_package(pinocchio CONFIG REQUIRED)
+find_package(yaml-cpp REQUIRED)
+
 # DiffADMM
 set(DIFFADMM_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/diff_ADMM")
 set(DIFFADMM_INC  "${DIFFADMM_ROOT}/include")
@@ -27,10 +32,12 @@ set(PROJECT_ROOT "${CMAKE_CURRENT_SOURCE_DIR}")
 set(PROJECT_INC  "${PROJECT_ROOT}/include")
 set(PROJECT_SRC  "${PROJECT_ROOT}/src/cpp")
 
-find_package(Kokkos REQUIRED)
-find_package(Eigen3 REQUIRED CONFIG)
-find_package(pinocchio CONFIG REQUIRED)
-find_package(yaml-cpp REQUIRED)
+file(GLOB_RECURSE DIFFADMM_SOURCES CONFIGURE_DEPENDS "${DIFFADMM_ROOT}/src/*.cpp")
+list(FILTER DIFFADMM_SOURCES EXCLUDE REGEX ".*(viewer|gui|opengl|vis).*\\.cpp$")  # glut breaks on macos
+add_library(diffadmm STATIC ${DIFFADMM_SOURCES})
+target_include_directories(diffadmm PUBLIC "${DIFFADMM_ROOT}/include")
+target_link_libraries(diffadmm PUBLIC Kokkos::kokkos)
+
 find_library(CPPAD_LIBRARY NAMES cppad_lib cppad HINTS $ENV{CONDA_PREFIX}/lib /opt/homebrew/lib)
 find_path(CPPAD_INCLUDE_DIR cppad/cppad.hpp HINTS $ENV{CONDA_PREFIX}/include /opt/homebrew/include)
 
@@ -69,12 +76,19 @@ endif()
 add_executable(rope_residual 
   ${PROJECT_SRC}/rope_residual_opt.cpp
   ${PROJECT_SRC}/rope_model.cpp)
-
 target_include_directories(rope_residual PRIVATE
-  ${PROJECT_INC}
-  ${DIFFADMM_INC})
+  ${PROJECT_INC})
 
-target_link_libraries(rope_residual PRIVATE leap yaml-cpp)     
+target_link_libraries(rope_residual PRIVATE leap yaml-cpp diffadmm)     
+
+add_executable(rope_admm 
+  ${PROJECT_SRC}/rope_admm_opt.cpp
+  ${PROJECT_SRC}/rope_model.cpp)
+target_include_directories(rope_admm PRIVATE
+  ${PROJECT_INC})
+target_link_libraries(rope_admm PRIVATE leap yaml-cpp diffadmm)   
+# target_compile_options(rope_admm PRIVATE -fsanitize=address,undefined -g)
+# target_link_options(rope_admm PRIVATE -fsanitize=address,undefined)
 
 # This breaks everything
 # include(CheckCXXCompilerFlag)

@@ -36,16 +36,12 @@
 #include <leap/core/node_dims.hpp>
 #include <leap/core/node_quantities.hpp>
 
-#include "../coupling/rope_model.hpp"
+#include "rope_model.hpp"
+#include "common.hpp"
 
 namespace leap::examples {
 
-    namespace pin = pinocchio;
-
-    struct PinSpec {
-        int vertex;
-        std::string frameName;
-    };
+    // namespace pin = pinocchio;
 
     // Pinned vertices are not decision variables in this structure
     //
@@ -327,14 +323,6 @@ namespace leap::examples {
     //     double k_;
     // };
 
-    // Contiguous index list [first, first+count) into a per-node [q;v;a;lam;u] vector.
-    inline std::vector<int> indexRange(int first, int count) {
-        std::vector<int> v(static_cast<size_t>(count));
-        for (int i = 0; i < count; ++i) {
-            v[static_cast<size_t>(i)] = first + i;
-        }
-        return v;
-    }
 
     // RobotConfig for a FIXED-BASE robot: no contacts, no monitor frames. gravity
     // defaults to z-up (0,0,-9.81) -- the RobotConfig struct default is the planar
@@ -413,7 +401,7 @@ namespace leap::examples {
             const ContactSet none{};
 
             auto freeFlat = [&](const Eigen::MatrixXd &X) -> Eigen::VectorXd {
-                const Eigen::MatrixXd Xf = X(freeVerts, Eigen::all); // n_free x 3
+                const Eigen::MatrixXd Xf = X(freeVerts, Eigen::indexing::all); // n_free x 3
                 return Xf.transpose().reshaped(); // [x0,y0,z0,x1,...] == DOF 3*v+j
             };
 

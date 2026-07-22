@@ -5,3 +5,5 @@
 **/__pycache__
 **/.cache
 perf.data*
+compile_commands.json
+sol_kinova_rope*
