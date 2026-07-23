@@ -233,7 +233,7 @@ namespace leap::examples {
             }
 
             // Least squares 1/2 || Ha + C + Jp^T(reaction) ||
-            return (c.tau + Jp.transpose() * grad_p).squaredNorm() / 2.0;
+            return (c.tau + Jp.transpose() * grad_p).squaredNorm() / 2.0 * 1e-4;
         }
 
         void gradient(const NodeQuantities &P, const NodeDims &d, const ModelEvalCache &c,
@@ -265,6 +265,8 @@ namespace leap::examples {
             g_P.segment(d.offQ() + nq_arm_, nfree_ * 3) = Kfp * Jp * u;
             g_P.segment(d.offV(), nv_arm_) = c.dtau_dv.transpose() * u;
             g_P.segment(d.offA(), nv_arm_) = c.M * u;
+
+            g_P *= 1e-4;
         }
 
         Eigen::MatrixXd buildR(const NodeQuantities &P, const ModelEvalCache &c) const {
@@ -331,20 +333,6 @@ namespace leap::examples {
     // arm): a throwaway probe model with no actuation is valid and lets us read
     // jointNames() (q/v order, "universe" excluded) to fill the list generically.
     // Pass an explicit list for an under-actuated fixed-base robot.
-    inline RobotConfig
-    armConfig(const std::string &urdfPath, const std::vector<std::string> &pinnedFrames,
-              const Eigen::Vector3d &gravity = Eigen::Vector3d(0.0, 0.0, -9.81)) {
-
-        RobotConfig cfg;
-        cfg.urdfPath = urdfPath;
-        cfg.gravity = gravity;
-
-        // const RobotModel m0 = RobotModel::fromUrdf(probe);
-        cfg.actuatedJoints = {};
-
-        cfg.monitorFrames = pinnedFrames;
-        return cfg;
-    }
 
     class ContinuousRopeResidualProblem final : public TrajectoryProblem {
       public:

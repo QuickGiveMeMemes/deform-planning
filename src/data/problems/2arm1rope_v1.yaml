@@ -5,16 +5,6 @@ ropeYaml: "./src/data/rope/arm_rope_2pin.yaml"
 pinFrames: ["arm1_end_effector_link", "arm2_end_effector_link"]
 
 # Other config items
-deg: 16
-T: 2.0
-diffadmm_steps: 21
-pfill: true
-mu0: 10
-mugrow: 3
-tol: 1e-6
-dsSeg: 5e-2
-sMax: 2
-muMax: 1e7
 
 # q0 for entire rigid body, specified by urdf
 q0_arm: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]

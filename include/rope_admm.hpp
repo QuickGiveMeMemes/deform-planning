@@ -94,8 +94,7 @@ namespace leap::examples {
         }
 
         // Assumed points are [-1, ..., 1] order, Q is (t, nq + nv + na)
-        void fillCache(const Eigen::Ref<const Eigen::MatrixXd> &Q, ModelEvalCache &,
-                       double T) override {
+        void fillCache(const Eigen::Ref<const Eigen::MatrixXd> &Q, double T) override {
             const int npin = pin_.vertex.size();
             const int N3 = rope_.r.rest_pos_d.extent(1);
             Eigen::Matrix<double, 6, Eigen::Dynamic> J6(6, model_.nv); // scratch
@@ -122,39 +121,22 @@ namespace leap::examples {
             const auto t1 = std::chrono::steady_clock::now();
             pin_.xhist_ = rope_.rope_hist();
             Eigen::MatrixXd loss_grad_per_step = Eigen::MatrixXd::Zero(rope_.r.T, N3);
-            Eigen::VectorXd xf_sim = pin_.xhist_.row(rope_.r.T - 1);
-            loss_grad_per_step.row(rope_.r.T - 1) = k * (xf_sim - xf_);
+            // Smooth interp 0 -> 1
+            for (int t = 0; t < rope_.r.T; ++t)
+                loss_grad_per_step.row(t) = ((t == rope_.r.T - 1) ? k : std::max(k / 10.0, 1.0)) * (pin_.xhist_.row(t) - xf_.transpose());
             const auto t2 = std::chrono::steady_clock::now();
             rope_.backward(loss_grad_per_step); // TODO configure from ctor for obstacles
             const auto t3 = std::chrono::steady_clock::now();
             const double timing = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
-            // omp_set_num_threads(leap_threads);
-            // std::fprintf(stderr, "  fwd=%.3f  bwd=%.3f\n",
-            //     std::chrono::duration<double>(t1-t0).count(),
-            //     std::chrono::duration<double>(t3-t2).count());
-            // std::fprintf(stderr, "  xhist finite=%d max|x|=%.3e\n",
-            //     (int)pin_.xhist_.allFinite(), pin_.xhist_.cwiseAbs().maxCoeff());
-
-            // // after rope_.backward():
-            // auto ic = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(), rope_.b.inner_citer_d);
-            // auto icv= Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(), rope_.b.inner_converged_d);
-            // auto cv = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(), rope_.b.converged_d);
-            // auto bg = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(), rope_.b.beta_gmres_d);
-            // std::fprintf(stderr, "  gmres(t=0): conv=%d inner=%d iters=%d beta=%.3e\n",
-            //     cv(0), icv(0), ic(0), bg(0));
-            // int first_bad = -1;
-            // for (int t = 0; t < rope_.r.T && first_bad < 0; ++t)
-            //     if (!pin_.xhist_.row(t).allFinite()) first_bad = t;
-            // std::fprintf(stderr, "  first NaN at t=%d\n", first_bad);
-            // std::fprintf(stderr, "  x0 fin=%d |x0|=%.2e  v0 fin=%d  pin fin=%d max|p|=%.2e  dt=%.3g\n",
-            //             (int)x0_.allFinite(), x0_.cwiseAbs().maxCoeff(),
-            //             (int)v0_.allFinite(), (int)pin_.p.allFinite(),
-            //             pin_.p.cwiseAbs().maxCoeff(), rope_.r.dt);
         }
 
         double value() const override {
-            Eigen::VectorXd xf_sim = pin_.xhist_.row(rope_.r.T - 1);
-            return k / 2.0 * (xf_sim - xf_).squaredNorm();
+            double s = 0.0;
+            for (int t = 0; t < rope_.r.T; ++t) {
+                const double w = (t == rope_.r.T-1) ? k : std::max(k/10.0, 1.0);
+                s += w/2.0 * (pin_.xhist_.row(t).transpose() - xf_).squaredNorm();
+            }
+            return s;
         }
 
         void gradient(Eigen::MatrixXd &gTau) const override {
@@ -164,9 +146,20 @@ namespace leap::examples {
             for (int t = 0; t < rope_.r.T; ++t)
                 gTau.col(t).head(nv_).noalias() =
                     pin_.Jp[t].transpose() *
-                    static_cast<Eigen::VectorXd>(rope_grad.row(t)); // J_p^T dL/dp
+                    static_cast<Eigen::VectorXd>(rope_grad.row(t)) ; // J_p^T dL/dp
+            // gTau *= k;
+            // std::fprintf(stderr, "  [rope] max|gTau|=%.3e finite=%d\n",
+            //  gTau.cwiseAbs().maxCoeff(), (int)gTau.allFinite());
         }
         // No hessian
+
+        // GN surrogate: k * Jp^T Jp per tau (rope sensitivity d x_f/d p_t ~ I). SPD, one k.
+        // Rope itself not factored in
+        void hessian(std::vector<Eigen::MatrixXd>& A) const override {
+            A.assign(rope_.r.T, Eigen::MatrixXd::Zero(nv_, nv_));
+            for (int t = 0; t < rope_.r.T; ++t)
+                A[t].noalias() = k * pin_.Jp[t].transpose() * pin_.Jp[t];   // nv_ x nv_
+        }
     };
 
     // Different from the one in rope, no reaction force so pins dont need to be kept track of here
@@ -183,13 +176,86 @@ namespace leap::examples {
         void gradient(const NodeQuantities &P, const NodeDims &d, const ModelEvalCache &c,
                       Eigen::Ref<Eigen::VectorXd> g_P) const override {
             Eigen::VectorXd u = c.tau;
+            // std::cout << "Control cost: " << value(P, d, c) << '\n';
             g_P.setZero();
             g_P.segment(d.offQ(), nq_arm_) = c.dtau_dq.transpose() * u;
             g_P.segment(d.offV(), nv_arm_) = c.dtau_dv.transpose() * u;
             g_P.segment(d.offA(), nv_arm_) = c.M * u;
         }
+
+        void addHessian(const NodeQuantities &P, const NodeDims &d, const ModelEvalCache &c,
+                          Eigen::MatrixXd& H_P) const override {
+            // GN Hessian of (1/2)||u||^2 with u = tau(q,v,a):  H = J_tau^T J_tau
+            const auto &Jq = c.dtau_dq;   // nv x nq_arm
+            const auto &Jv = c.dtau_dv;   // nv x nv_arm
+            const auto &Ja = c.M;         // nv x nv_arm  (du/da = M)
+
+            const int oq = d.offQ(), ov = d.offV(), oa = d.offA();
+
+            H_P.block(oq, oq, nq_arm_, nq_arm_).noalias() += Jq.transpose() * Jq;
+            H_P.block(ov, ov, nv_arm_, nv_arm_).noalias() += Jv.transpose() * Jv;
+            H_P.block(oa, oa, nv_arm_, nv_arm_).noalias() += Ja.transpose() * Ja;
+
+            const Eigen::MatrixXd Hqv = Jq.transpose() * Jv;
+            const Eigen::MatrixXd Hqa = Jq.transpose() * Ja;
+            const Eigen::MatrixXd Hva = Jv.transpose() * Ja;
+
+            H_P.block(oq, ov, nq_arm_, nv_arm_).noalias() += Hqv;
+            H_P.block(ov, oq, nv_arm_, nq_arm_).noalias() += Hqv.transpose();
+
+            H_P.block(oq, oa, nq_arm_, nv_arm_).noalias() += Hqa;
+            H_P.block(oa, oq, nv_arm_, nq_arm_).noalias() += Hqa.transpose();
+
+            H_P.block(ov, oa, nv_arm_, nv_arm_).noalias() += Hva;
+            H_P.block(oa, ov, nv_arm_, nv_arm_).noalias() += Hva.transpose();
+        }
+
         int nq_arm_, nv_arm_;
         std::string name_;
+    };
+    struct FramePinConstraint : public ConstraintBase {
+        FramePinConstraint(const RobotModel& m, std::vector<PinSpec> pins,
+                            Eigen::Matrix3Xd tgt, std::string name = "frame_pin")
+            : nv_arm_(m.nv()), tgt_(std::move(tgt)), name_(std::move(name)) {
+            std::sort(pins.begin(), pins.end(),
+                    [](const PinSpec& a, const PinSpec& b) { return a.vertex < b.vertex; });
+            std::unordered_map<std::string, int> slotOf;
+            for (int i = 0; i < m.nMonitors(); ++i) slotOf[m.monitorName(i)] = i;
+            for (const PinSpec& p : pins) {
+                auto it = slotOf.find(p.frameName);
+                if (it == slotOf.end())
+                    throw std::runtime_error("FramePinConstraint: '" + p.frameName +
+                                            "' is not a registered monitor frame");
+                pinSlot_.push_back(it->second);
+            }
+            if (static_cast<int>(pinSlot_.size()) != tgt_.cols())
+                throw std::invalid_argument("FramePinConstraint: pins/targets size mismatch");
+        }
+
+        const std::string& name() const override { return name_; }
+        int rows(const NodeDims&) const override { return 3 * static_cast<int>(pinSlot_.size()); }
+        Sense sense() const override { return Sense::Equality; }
+        unsigned modelNeeds() const override { return kMonitorPos; }
+
+        void value(const NodeQuantities&, const NodeDims&, const ModelEvalCache& c,
+                    Eigen::Ref<Eigen::VectorXd> g) const override {
+            for (int j = 0; j < static_cast<int>(pinSlot_.size()); ++j)
+                g.segment<3>(3 * j) = c.monPos[pinSlot_[j]] - tgt_.col(j);
+        }
+
+        void jacobian(const NodeQuantities&, const NodeDims& d, const ModelEvalCache& c,
+                        MatRef J) const override {
+            J.setZero();
+            // arm q block only: with extraDims, d.nq = nq_arm + 3*nfree, and FK depends
+            // on the arm DOFs alone (rope vertices are further along the same q field).
+            for (int j = 0; j < static_cast<int>(pinSlot_.size()); ++j)
+                J.block(3 * j, d.offQ(), 3, nv_arm_) = c.monJ[pinSlot_[j]];
+        }
+
+        std::vector<int>  pinSlot_;
+        Eigen::Matrix3Xd  tgt_;
+        int               nv_arm_;
+        std::string       name_;
     };
 
     // Contiguous index list [first, first+count) into a per-node [q;v;a;lam;u] vector.
@@ -246,8 +312,15 @@ namespace leap::examples {
             const int n_rope = rin.rest_pos.rows();
             const int N3 = n_rope * 3; // xyz
 
+            std::vector<std::string> pinned;
+            pinned.reserve(rin.pinned_idx.size());
+
+            for (auto &p : pins) {
+                pinned.push_back(p.frameName);
+            }
+
             model_ =
-                std::make_shared<RobotModel>(RobotModel::fromUrdf(simpleArmConfig(urdfPath, gravity)));
+                std::make_shared<RobotModel>(RobotModel::fromUrdf(armConfig(urdfPath, pinned, gravity)));
             param_ = std::make_shared<FullStateParam>();
 
             const RobotModel &m = *model_;
@@ -275,20 +348,35 @@ namespace leap::examples {
             // Node-enforced rope dynamics
             ropeCost_ = std::make_shared<RopeCost>(loc_m, rp, pins, "admm rope", x0_r, v0_r, xf_r, k);
             ms.rollout.push_back({ropeCost_, taus});
+            
+            // Hardcoded to rope + endpoints currently, unlike other parts
+            Eigen::Matrix3Xd goal(3, 2);
+            goal.col(0) = xf_r.row(0).transpose();                // rope vertex 0   -> arm1 EE
+            goal.col(1) = xf_r.row(xf_r.rows() - 1).transpose();  // rope vertex n-1 -> arm2 EE
+            std::cout << xf_r << std::endl;
+            std::cout << goal << std::endl;
+
+            ms.attachments.push_back(
+                {std::make_shared<FramePinConstraint>(m, pins, goal, "frame_pin_f"),
+                W::LastNode});
 
             // Boundary conditions
             ms.attachments.push_back({std::make_shared<PinConstraint>(indexRange(d.offQ(), nq_arm),
-                                                                      q0_arm, "pin_q0_arm"),
+                                                                      q0_arm, "pin_q0_arm", Enforce::Dirichlet),
                                       W::FirstNode});
 
             ms.attachments.push_back({std::make_shared<PinConstraint>(indexRange(d.offV(), nv_arm),
-                                                                      v0_arm, "pin_v0_arm"),
+                                                                      v0_arm, "pin_v0_arm", Enforce::Dirichlet),
                                       W::FirstNode});
+            
 
-            ms.attachments.push_back({std::make_shared<PinConstraint>(indexRange(d.offQ(), nq_arm),
-                                                                      qf_arm, "pin_qf_arm"),
-                                      W::LastNode});
+            // qf, vf only for ref traj generation
+            // ms.attachments.push_back({std::make_shared<PinConstraint>(indexRange(d.offQ(), nq_arm),
+            //                                                           qf_arm, "pin_qf_arm"),
+            //                           W::LastNode});
+            
 
+            // Mostly because a zero condition is necessary
             ms.attachments.push_back({std::make_shared<PinConstraint>(indexRange(d.offV(), nv_arm),
                                                                       vf_arm, "pin_vf_arm"),
                                       W::LastNode});
@@ -300,7 +388,7 @@ namespace leap::examples {
             Eigen::VectorXd q0(d.nq), qf(d.nq);
             q0 = q0_arm;
             qf = qf_arm;
-            buildInitialGuess(q0, qf);
+            buildInitialGuess(q0, qf, v0_arm, vf_arm);
         }
 
         std::shared_ptr<RobotModel> model() const override { return model_; }
@@ -313,7 +401,7 @@ namespace leap::examples {
         // Linear pose interpolation q0 -> qf across the segment's CGL time grid, with
         // spectral V = a_scale Q Dt, A = a_scale^2 Q D2t; U and duals zero. Mirrors the
         // Go2 builder's initial guess for a single segment.
-        void buildInitialGuess(const Eigen::VectorXd &q0, const Eigen::VectorXd &qf) {
+        void buildInitialGuess(const Eigen::VectorXd &q0, const Eigen::VectorXd &qf, const Eigen::VectorXd &v0, const Eigen::VectorXd &vf) {
             const CompiledProblem prob = CompiledProblem::compile(model_, spec_, param_);
             const Layout &L = prob.layout();
             y0_.setZero(L.n());
@@ -332,6 +420,8 @@ namespace leap::examples {
             Eigen::Map<Eigen::MatrixXd> A(y0_.data() + sl.x0 + sl.off[kFieldA], sl.dims.na, sl.Nn);
             V = ops.a_scale * Q * ops.Dt;
             A = ops.a_scale * ops.a_scale * Q * ops.D2t;
+            V.col(0)         = v0;
+            V.col(sl.Nn - 1) = vf;
         }
 
         std::shared_ptr<RobotModel> model_;

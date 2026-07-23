@@ -7,3 +7,6 @@
 perf.data*
 compile_commands.json
 sol_kinova_rope*
+generated
+out
+.DS_store

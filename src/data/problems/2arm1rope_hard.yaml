@@ -11,6 +11,7 @@ mu0: 10
 mugrow: 3
 tol: 1e-6
 dsSeg: 5e-2
+ds: 1e-4
 sMax: 2
 muMax: 1e7
  

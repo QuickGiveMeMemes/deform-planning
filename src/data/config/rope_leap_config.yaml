@@ -1,0 +1,13 @@
+deg: 17
+T: 1.5
+diffadmm_steps: 21
+pfill: true
+mu0: 10
+mugrow: 3
+tol: 1e-6
+dsSeg: 5e-2
+ds: 5e-2
+sMax: 2
+muMax: 1e5
+stallFlow: 0
+trackPen: 2e4

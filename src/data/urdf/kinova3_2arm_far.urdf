@@ -1,0 +1,389 @@
+<?xml version="1.0" encoding="utf-8"?>
+<robot name="dual_gen3">
+
+  <link name="world"/>
+
+
+
+  <joint name="arm1_base_joint" type="fixed">
+    <origin rpy="0 0 0" xyz="0 0 0"/>
+    <parent link="world"/>
+    <child link="arm1_base_link"/>
+  </joint>
+
+  <link name="arm1_base_link">
+    <inertial>
+      <origin rpy="0 0 0" xyz="-0.000648 -0.000166 0.084487"/>
+      <mass value="1.697"/>
+      <inertia ixx="0.004622" ixy="9E-06" ixz="6E-05" iyy="0.004495" iyz="9E-06" izz="0.002079"/>
+    </inertial>
+  </link>
+
+  <link name="arm1_shoulder_link">
+    <inertial>
+      <origin rpy="0 0 0" xyz="-2.3E-05 -0.010364 -0.07336"/>
+      <mass value="1.3773"/>
+      <inertia ixx="0.00457" ixy="1E-06" ixz="2E-06" iyy="0.004831" iyz="0.000448" izz="0.001409"/>
+    </inertial>
+  </link>
+
+  <joint name="arm1_joint_1" type="revolute">
+    <origin rpy="3.141592653589793 0 0" xyz="0 0 0.15643"/>
+    <parent link="arm1_base_link"/>
+    <child link="arm1_shoulder_link"/>
+    <axis xyz="0 0 1"/>
+    <limit effort="39" lower="-6.28" upper="6.28" velocity="1.3963"/>
+    <dynamics friction="0.5217383101288284" damping="10.5"/>
+  </joint>
+
+  <link name="arm1_half_arm_1_link">
+    <inertial>
+      <origin rpy="0 0 0" xyz="-4.4E-05 -0.09958 -0.013278"/>
+      <mass value="1.1636"/>
+      <inertia ixx="0.011088" ixy="5E-06" ixz="0" iyy="0.001072" iyz="-0.000691" izz="0.011255"/>
+    </inertial>
+  </link>
+
+  <joint name="arm1_joint_2" type="revolute">
+    <origin rpy="1.5707963267948966 0 0" xyz="0 0.005375 -0.12838"/>
+    <parent link="arm1_shoulder_link"/>
+    <child link="arm1_half_arm_1_link"/>
+    <axis xyz="0 0 1"/>
+    <limit effort="39" lower="-2.25" upper="2.25" velocity="1.3963"/>
+    <dynamics friction="0.5769579059927288" damping="7.406484581723072"/>
+  </joint>
+
+  <link name="arm1_half_arm_2_link">
+    <inertial>
+      <origin rpy="0 0 0" xyz="-4.4E-05 -0.006641 -0.117892"/>
+      <mass value="1.1636"/>
+      <inertia ixx="0.010932" ixy="0" ixz="-7E-06" iyy="0.011127" iyz="0.000606" izz="0.001043"/>
+    </inertial>
+  </link>
+
+  <joint name="arm1_joint_3" type="revolute">
+    <origin rpy="-1.5707963267948966 0 0" xyz="0 -0.21038 -0.006375"/>
+    <parent link="arm1_half_arm_1_link"/>
+    <child link="arm1_half_arm_2_link"/>
+    <axis xyz="0 0 1"/>
+    <limit effort="39" lower="-6.28" upper="6.28" velocity="1.3963"/>
+    <dynamics friction="0.4213397946418778" damping="9.972763340817286"/>
+  </joint>
+
+  <link name="arm1_forearm_link">
+    <inertial>
+      <origin rpy="0 0 0" xyz="-1.8E-05 -0.075478 -0.015006"/>
+      <mass value="0.9302"/>
+      <inertia ixx="0.008147" ixy="-1E-06" ixz="0" iyy="0.000631" iyz="-0.0005" izz="0.008316"/>
+    </inertial>
+  </link>
+
+  <joint name="arm1_joint_4" type="revolute">
+    <origin rpy="1.5707963267948966 0 0" xyz="0 0.006375 -0.21038"/>
+    <parent link="arm1_half_arm_2_link"/>
+    <child link="arm1_forearm_link"/>
+    <axis xyz="0 0 1"/>
+    <limit effort="39" lower="-2.58" upper="2.58" velocity="1.3963"/>
+    <dynamics friction="0.4945515376566732" damping="8.266795082250392"/>
+  </joint>
+
+  <link name="arm1_spherical_wrist_1_link">
+    <inertial>
+      <origin rpy="0 0 0" xyz="1E-06 -0.009432 -0.063883"/>
+      <mass value="0.6781"/>
+      <inertia ixx="0.001596" ixy="0" ixz="0" iyy="0.001607" iyz="0.000256" izz="0.000399"/>
+    </inertial>
+  </link>
+
+  <joint name="arm1_joint_5" type="revolute">
+    <origin rpy="-1.5707963267948966 0 0" xyz="0 -0.20843 -0.006375"/>
+    <parent link="arm1_forearm_link"/>
+    <child link="arm1_spherical_wrist_1_link"/>
+    <axis xyz="0 0 1"/>
+    <limit effort="9" lower="-6.28" upper="6.28" velocity="1.2218"/>
+    <dynamics friction="0.16110705026613545" damping="8.857224902652815"/>
+  </joint>
+
+  <link name="arm1_spherical_wrist_2_link">
+    <inertial>
+      <origin rpy="0 0 0" xyz="1E-06 -0.045483 -0.00965"/>
+      <mass value="0.6781"/>
+      <inertia ixx="0.001641" ixy="0" ixz="0" iyy="0.00041" iyz="-0.000278" izz="0.001641"/>
+    </inertial>
+  </link>
+
+  <joint name="arm1_joint_6" type="revolute">
+    <origin rpy="1.5707963267948966 0 0" xyz="0 0.00017505 -0.10593"/>
+    <parent link="arm1_spherical_wrist_1_link"/>
+    <child link="arm1_spherical_wrist_2_link"/>
+    <axis xyz="0 0 1"/>
+    <limit effort="9" lower="-2.1" upper="2.1" velocity="1.2218"/>
+    <dynamics friction="0.13334911855141302" damping="8.711083156933284"/>
+  </joint>
+
+  <link name="arm1_bracelet_link">
+    <inertial>
+      <origin rpy="0 0 0" xyz="0.000281 0.011402 -0.029798"/>
+      <mass value="0.5"/>
+      <inertia ixx="0.000587" ixy="3E-06" ixz="3E-06" iyy="0.000369" iyz="-0.000118" izz="0.000609"/>
+    </inertial>
+  </link>
+
+  <joint name="arm1_joint_7" type="revolute">
+    <origin rpy="-1.5707963267948966 0 0" xyz="0 -0.10593 -0.00017505"/>
+    <parent link="arm1_spherical_wrist_2_link"/>
+    <child link="arm1_bracelet_link"/>
+    <axis xyz="0 0 1"/>
+    <limit effort="9" lower="-6.28" upper="6.28" velocity="1.2218"/>
+    <dynamics friction="0.143444018171737" damping="8.888190363830693"/>
+  </joint>
+
+  <link name="arm1_end_effector_link">
+    <inertial>
+      <origin rpy="0 0 0" xyz="-4.4E-05 -0.09958 -0.013278"/>
+      <mass value="0"/>
+      <inertia ixx="0.0" ixy="0.0" ixz="0.0" iyy="0.0" iyz="-0.0" izz="0.0"/>
+    </inertial>
+  </link>
+
+  <joint name="arm1_end_effector" type="fixed">
+    <origin rpy="3.141592653589793 0 0" xyz="0 0 -0.0615250000000001"/>
+    <parent link="arm1_bracelet_link"/>
+    <child link="arm1_end_effector_link"/>
+    <axis xyz="0 0 0"/>
+  </joint>
+  <transmission name="arm1_joint_1_trans" type="transmission_interface/SimpleTransmission">
+    <joint name="arm1_joint_1"/>
+    <actuator name="arm1_joint_1_motor"/>
+    <motorInertia>8.03</motorInertia>
+  </transmission>
+
+  <transmission name="arm1_joint_2_trans" type="transmission_interface/SimpleTransmission">
+    <joint name="arm1_joint_2"/>
+    <actuator name="arm1_joint_2_motor"/>
+    <motorInertia>11.996202461530364</motorInertia>
+  </transmission>
+
+  <transmission name="arm1_joint_3_trans" type="transmission_interface/SimpleTransmission">
+    <joint name="arm1_joint_3"/>
+    <actuator name="arm1_joint_3_motor"/>
+    <motorInertia>9.002542786175152</motorInertia>
+  </transmission>
+
+  <transmission name="arm1_joint_4_trans" type="transmission_interface/SimpleTransmission">
+    <joint name="arm1_joint_4"/>
+    <actuator name="arm1_joint_4_motor"/>
+    <motorInertia>11.580643931670636</motorInertia>
+  </transmission>
+
+  <transmission name="arm1_joint_5_trans" type="transmission_interface/SimpleTransmission">
+    <joint name="arm1_joint_5"/>
+    <actuator name="arm1_joint_5_motor"/>
+    <motorInertia>8.466504091791412</motorInertia>
+  </transmission>
+
+  <transmission name="arm1_joint_6_trans" type="transmission_interface/SimpleTransmission">
+    <joint name="arm1_joint_6"/>
+    <actuator name="arm1_joint_6_motor"/>
+    <motorInertia>8.853706937374243</motorInertia>
+  </transmission>
+
+  <transmission name="arm1_joint_7_trans" type="transmission_interface/SimpleTransmission">
+    <joint name="arm1_joint_7"/>
+    <actuator name="arm1_joint_7_motor"/>
+    <motorInertia>8.858730366468532</motorInertia>
+  </transmission>
+
+
+
+
+  <joint name="arm2_base_joint" type="fixed">
+    <origin rpy="0 0 0" xyz="2.0 0 0"/>
+    <parent link="world"/>
+    <child link="arm2_base_link"/>
+  </joint>
+
+  <link name="arm2_base_link">
+    <inertial>
+      <origin rpy="0 0 0" xyz="-0.000648 -0.000166 0.084487"/>
+      <mass value="1.697"/>
+      <inertia ixx="0.004622" ixy="9E-06" ixz="6E-05" iyy="0.004495" iyz="9E-06" izz="0.002079"/>
+    </inertial>
+  </link>
+
+  <link name="arm2_shoulder_link">
+    <inertial>
+      <origin rpy="0 0 0" xyz="-2.3E-05 -0.010364 -0.07336"/>
+      <mass value="1.3773"/>
+      <inertia ixx="0.00457" ixy="1E-06" ixz="2E-06" iyy="0.004831" iyz="0.000448" izz="0.001409"/>
+    </inertial>
+  </link>
+
+  <joint name="arm2_joint_1" type="revolute">
+    <origin rpy="3.141592653589793 0 0" xyz="0 0 0.15643"/>
+    <parent link="arm2_base_link"/>
+    <child link="arm2_shoulder_link"/>
+    <axis xyz="0 0 1"/>
+    <limit effort="39" lower="-6.28" upper="6.28" velocity="1.3963"/>
+    <dynamics friction="0.5217383101288284" damping="10.5"/>
+  </joint>
+
+  <link name="arm2_half_arm_1_link">
+    <inertial>
+      <origin rpy="0 0 0" xyz="-4.4E-05 -0.09958 -0.013278"/>
+      <mass value="1.1636"/>
+      <inertia ixx="0.011088" ixy="5E-06" ixz="0" iyy="0.001072" iyz="-0.000691" izz="0.011255"/>
+    </inertial>
+  </link>
+
+  <joint name="arm2_joint_2" type="revolute">
+    <origin rpy="1.5707963267948966 0 0" xyz="0 0.005375 -0.12838"/>
+    <parent link="arm2_shoulder_link"/>
+    <child link="arm2_half_arm_1_link"/>
+    <axis xyz="0 0 1"/>
+    <limit effort="39" lower="-2.25" upper="2.25" velocity="1.3963"/>
+    <dynamics friction="0.5769579059927288" damping="7.406484581723072"/>
+  </joint>
+
+  <link name="arm2_half_arm_2_link">
+    <inertial>
+      <origin rpy="0 0 0" xyz="-4.4E-05 -0.006641 -0.117892"/>
+      <mass value="1.1636"/>
+      <inertia ixx="0.010932" ixy="0" ixz="-7E-06" iyy="0.011127" iyz="0.000606" izz="0.001043"/>
+    </inertial>
+  </link>
+
+  <joint name="arm2_joint_3" type="revolute">
+    <origin rpy="-1.5707963267948966 0 0" xyz="0 -0.21038 -0.006375"/>
+    <parent link="arm2_half_arm_1_link"/>
+    <child link="arm2_half_arm_2_link"/>
+    <axis xyz="0 0 1"/>
+    <limit effort="39" lower="-6.28" upper="6.28" velocity="1.3963"/>
+    <dynamics friction="0.4213397946418778" damping="9.972763340817286"/>
+  </joint>
+
+  <link name="arm2_forearm_link">
+    <inertial>
+      <origin rpy="0 0 0" xyz="-1.8E-05 -0.075478 -0.015006"/>
+      <mass value="0.9302"/>
+      <inertia ixx="0.008147" ixy="-1E-06" ixz="0" iyy="0.000631" iyz="-0.0005" izz="0.008316"/>
+    </inertial>
+  </link>
+
+  <joint name="arm2_joint_4" type="revolute">
+    <origin rpy="1.5707963267948966 0 0" xyz="0 0.006375 -0.21038"/>
+    <parent link="arm2_half_arm_2_link"/>
+    <child link="arm2_forearm_link"/>
+    <axis xyz="0 0 1"/>
+    <limit effort="39" lower="-2.58" upper="2.58" velocity="1.3963"/>
+    <dynamics friction="0.4945515376566732" damping="8.266795082250392"/>
+  </joint>
+
+  <link name="arm2_spherical_wrist_1_link">
+    <inertial>
+      <origin rpy="0 0 0" xyz="1E-06 -0.009432 -0.063883"/>
+      <mass value="0.6781"/>
+      <inertia ixx="0.001596" ixy="0" ixz="0" iyy="0.001607" iyz="0.000256" izz="0.000399"/>
+    </inertial>
+  </link>
+
+  <joint name="arm2_joint_5" type="revolute">
+    <origin rpy="-1.5707963267948966 0 0" xyz="0 -0.20843 -0.006375"/>
+    <parent link="arm2_forearm_link"/>
+    <child link="arm2_spherical_wrist_1_link"/>
+    <axis xyz="0 0 1"/>
+    <limit effort="9" lower="-6.28" upper="6.28" velocity="1.2218"/>
+    <dynamics friction="0.16110705026613545" damping="8.857224902652815"/>
+  </joint>
+
+  <link name="arm2_spherical_wrist_2_link">
+    <inertial>
+      <origin rpy="0 0 0" xyz="1E-06 -0.045483 -0.00965"/>
+      <mass value="0.6781"/>
+      <inertia ixx="0.001641" ixy="0" ixz="0" iyy="0.00041" iyz="-0.000278" izz="0.001641"/>
+    </inertial>
+  </link>
+
+  <joint name="arm2_joint_6" type="revolute">
+    <origin rpy="1.5707963267948966 0 0" xyz="0 0.00017505 -0.10593"/>
+    <parent link="arm2_spherical_wrist_1_link"/>
+    <child link="arm2_spherical_wrist_2_link"/>
+    <axis xyz="0 0 1"/>
+    <limit effort="9" lower="-2.1" upper="2.1" velocity="1.2218"/>
+    <dynamics friction="0.13334911855141302" damping="8.711083156933284"/>
+  </joint>
+
+  <link name="arm2_bracelet_link">
+    <inertial>
+      <origin rpy="0 0 0" xyz="0.000281 0.011402 -0.029798"/>
+      <mass value="0.5"/>
+      <inertia ixx="0.000587" ixy="3E-06" ixz="3E-06" iyy="0.000369" iyz="-0.000118" izz="0.000609"/>
+    </inertial>
+  </link>
+
+  <joint name="arm2_joint_7" type="revolute">
+    <origin rpy="-1.5707963267948966 0 0" xyz="0 -0.10593 -0.00017505"/>
+    <parent link="arm2_spherical_wrist_2_link"/>
+    <child link="arm2_bracelet_link"/>
+    <axis xyz="0 0 1"/>
+    <limit effort="9" lower="-6.28" upper="6.28" velocity="1.2218"/>
+    <dynamics friction="0.143444018171737" damping="8.888190363830693"/>
+  </joint>
+
+  <link name="arm2_end_effector_link">
+    <inertial>
+      <origin rpy="0 0 0" xyz="-4.4E-05 -0.09958 -0.013278"/>
+      <mass value="0"/>
+      <inertia ixx="0.0" ixy="0.0" ixz="0.0" iyy="0.0" iyz="-0.0" izz="0.0"/>
+    </inertial>
+  </link>
+
+  <joint name="arm2_end_effector" type="fixed">
+    <origin rpy="3.141592653589793 0 0" xyz="0 0 -0.0615250000000001"/>
+    <parent link="arm2_bracelet_link"/>
+    <child link="arm2_end_effector_link"/>
+    <axis xyz="0 0 0"/>
+  </joint>
+  <transmission name="arm2_joint_1_trans" type="transmission_interface/SimpleTransmission">
+    <joint name="arm2_joint_1"/>
+    <actuator name="arm2_joint_1_motor"/>
+    <motorInertia>8.03</motorInertia>
+  </transmission>
+
+  <transmission name="arm2_joint_2_trans" type="transmission_interface/SimpleTransmission">
+    <joint name="arm2_joint_2"/>
+    <actuator name="arm2_joint_2_motor"/>
+    <motorInertia>11.996202461530364</motorInertia>
+  </transmission>
+
+  <transmission name="arm2_joint_3_trans" type="transmission_interface/SimpleTransmission">
+    <joint name="arm2_joint_3"/>
+    <actuator name="arm2_joint_3_motor"/>
+    <motorInertia>9.002542786175152</motorInertia>
+  </transmission>
+
+  <transmission name="arm2_joint_4_trans" type="transmission_interface/SimpleTransmission">
+    <joint name="arm2_joint_4"/>
+    <actuator name="arm2_joint_4_motor"/>
+    <motorInertia>11.580643931670636</motorInertia>
+  </transmission>
+
+  <transmission name="arm2_joint_5_trans" type="transmission_interface/SimpleTransmission">
+    <joint name="arm2_joint_5"/>
+    <actuator name="arm2_joint_5_motor"/>
+    <motorInertia>8.466504091791412</motorInertia>
+  </transmission>
+
+  <transmission name="arm2_joint_6_trans" type="transmission_interface/SimpleTransmission">
+    <joint name="arm2_joint_6"/>
+    <actuator name="arm2_joint_6_motor"/>
+    <motorInertia>8.853706937374243</motorInertia>
+  </transmission>
+
+  <transmission name="arm2_joint_7_trans" type="transmission_interface/SimpleTransmission">
+    <joint name="arm2_joint_7"/>
+    <actuator name="arm2_joint_7_motor"/>
+    <motorInertia>8.858730366468532</motorInertia>
+  </transmission>
+
+</robot>

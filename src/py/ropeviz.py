@@ -18,8 +18,10 @@ reconstruct it the way the cpp does — the initial rope rigidly translated by t
 FK displacement of pin 0's frame between q0 and qf (see rope_admm_opt.cpp).
 """
  
+import argparse
 import json
 import os
+from pathlib import Path
  
 import numpy as np
 import matplotlib.pyplot as plt
@@ -32,7 +34,7 @@ except Exception:
 # ----------------------------------------------------------------------------
 # config
 # ----------------------------------------------------------------------------
-SCENARIO = "./src/data/problems/2arm1rope_v1.yaml"               # scenario yaml (source of the GOAL)
+SCENARIO = "./src/data/problems/generated/2arm1rope_lift.yaml"               # scenario yaml (source of the GOAL)
 META = "sol_kinova_rope_alm_meta.json"
 SOL = "sol_kinova_rope_alm_mode0.csv"
 CONS = "sol_kinova_rope_alm_cons_mode0.csv"
@@ -251,24 +253,28 @@ def animate(model, data, rope, q_u, sc=None, goal_R=None, fps=8):
     t, R = rope["t"], rope["R"]
     fig = plt.figure(figsize=(9, 8))
     ax = fig.add_subplot(111, projection="3d")
+
+    arm_kwargs = {
+        "color": "k"
+    }
  
-    segs = gen_plt_from_urdf(ax, model, data, q_u[0])
-    (rope_ln,) = ax.plot3D(*R[0].T, "o-", ms=4, lw=1.5, color="tab:red", label="rope")
+    segs = gen_plt_from_urdf(ax, model, data, q_u[0], seg_kwargs=arm_kwargs)
+    (rope_ln,) = ax.plot3D(*R[0].T, "-", ms=4, lw=1.5, color="tab:blue", label="rope")
     pins = rope["pinned"]
-    (pin_pts,) = ax.plot3D(*R[0, pins].T, "*", ms=13, color="tab:green", label="pins")
+    (pin_pts,) = ax.plot3D(*R[0, pins].T, "s", ms=5, color="tab:orange", label="pins")
  
     # ---- semitransparent GOAL overlay (arm ghost + rope ghost) at qf ----
     all_pts = [R.reshape(-1, 3)]
-    if sc is not None:
-        try:
-            ghost_segs = gen_plt_from_urdf(ax, model, data, sc["qf_arm"])
-            for s in ghost_segs:
-                try:
-                    s.set_alpha(GHOST_KW["alpha"]); s.set_color("gray")
-                except Exception:
-                    pass
-        except Exception as e:
-            print(f"[anim] ghost arm failed ({e})")
+    # if sc is not None:
+    #     try:
+    #         ghost_segs = gen_plt_from_urdf(ax, model, data, sc["qf_arm"])
+    #         for s in ghost_segs:
+    #             try:
+    #                 s.set_alpha(GHOST_KW["alpha"]); s.set_color("gray")
+    #             except Exception:
+    #                 pass
+    #     except Exception as e:
+    #         print(f"[anim] ghost arm failed ({e})")
     if goal_R is not None:
         ax.plot3D(*goal_R.T, "o--", ms=3, lw=1.2, color="tab:blue",
                   label="rope goal", **GHOST_KW)
@@ -301,6 +307,13 @@ def animate(model, data, rope, q_u, sc=None, goal_R=None, fps=8):
  
 # ----------------------------------------------------------------------------
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="A script to process custom user data.")   
+    parser.add_argument("--cfid", type=str, help="yaml")
+
+    args = parser.parse_args()
+    if args.cfid is not None:
+        SCENARIO = Path("./src/data/problems/generated") / f"2arm1rope_{args.cfid}.yaml"
+
     meta = load_meta(META)
     t, tau, q, v, a, u = load_sol(SOL, meta)
     node, groups = load_cons(CONS)

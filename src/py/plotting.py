@@ -45,7 +45,7 @@ def gen_plt_from_urdf(ax, model, data, q=None, pt_kwargs=None, seg_kwargs=None):
                 x0[p_idx, :],
             )
         )
-        seg, = ax.plot3D(x[:, 0], x[:, 1], x[:, 2])
+        seg, = ax.plot3D(x[:, 0], x[:, 1], x[:, 2], **seg_kwargs)
         segs.append((j_idx, p_idx, seg))
 
     ax.set_axis_on()
