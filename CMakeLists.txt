@@ -87,6 +87,13 @@ add_executable(rope_admm
 target_include_directories(rope_admm PRIVATE
   ${PROJECT_INC})
 target_link_libraries(rope_admm PRIVATE leap yaml-cpp diffadmm)   
+
+add_executable(pm_admm 
+  ${PROJECT_SRC}/pm_admm.cpp
+  ${PROJECT_SRC}/rope_model.cpp)
+target_include_directories(pm_admm PRIVATE
+  ${PROJECT_INC})
+target_link_libraries(pm_admm PRIVATE leap yaml-cpp diffadmm)   
 # target_compile_options(rope_admm PRIVATE -fsanitize=address,undefined -g)
 # target_link_options(rope_admm PRIVATE -fsanitize=address,undefined)
 

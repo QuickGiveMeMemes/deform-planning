@@ -8,6 +8,6 @@ tol: 1e-6
 dsSeg: 5e-2
 ds: 5e-2
 sMax: 2
-muMax: 1e5
+muMax: 1e4
 stallFlow: 0
-trackPen: 2e4
+trackPen: 3e5
